@@ -2,7 +2,7 @@ package network
 
 import (
 	"encoding/json"
-	"github.com/johynpapin/ensicoin-go/consensus"
+	"github.com/EnsicoinDevs/ensicoin-go/consensus"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"net"
