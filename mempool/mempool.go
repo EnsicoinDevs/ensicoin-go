@@ -1,7 +1,7 @@
 package mempool
 
 import (
-	"github.com/johynpapin/ensicoin-go/blockchain"
+	"github.com/EnsicoinDevs/ensicoin-go/blockchain"
 	"sync"
 )
 

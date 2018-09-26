@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/johynpapin/ensicoin-go/blockchain"
-	"github.com/johynpapin/ensicoin-go/consensus"
-	"github.com/johynpapin/ensicoin-go/mempool"
-	"github.com/johynpapin/ensicoin-go/network"
+	"github.com/EnsicoinDevs/ensicoin-go/blockchain"
+	"github.com/EnsicoinDevs/ensicoin-go/consensus"
+	"github.com/EnsicoinDevs/ensicoin-go/mempool"
+	"github.com/EnsicoinDevs/ensicoin-go/network"
 	log "github.com/sirupsen/logrus"
 	"net"
 )
