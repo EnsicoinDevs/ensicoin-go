@@ -42,18 +42,21 @@ func (peer *Peer) Run() {
 	jsonDecoder := json.NewDecoder(peer.conn)
 
 	for {
-		var message Message
+		var subMessage json.RawMessage
+		message := Message{
+			Message: &subMessage,
+		}
 		err := jsonDecoder.Decode(&message)
 		if err != nil {
 			log.WithError(err).Error("error decoding a message")
 			return
 		}
 
-		go peer.handleMessage(&message)
+		go peer.handleMessage(&message, &subMessage)
 	}
 }
 
-func (peer *Peer) handleMessage(message *Message) {
+func (peer *Peer) handleMessage(message *Message, subMessage *json.RawMessage) {
 	log.WithFields(log.Fields{
 		"peer":    peer,
 		"message": message,
@@ -62,7 +65,7 @@ func (peer *Peer) handleMessage(message *Message) {
 	switch message.Type {
 	case "whoami":
 		var m *WhoamiMessage
-		err := json.Unmarshal([]byte(message.Message), &m)
+		err := json.Unmarshal(*subMessage, &m)
 		if err != nil {
 			log.WithError(err).Error("error unmarshaling a message")
 			return
@@ -71,7 +74,7 @@ func (peer *Peer) handleMessage(message *Message) {
 		peer.callbacks.OnWhoami(m)
 	case "inv":
 		var m *InvMessage
-		err := json.Unmarshal([]byte(message.Message), &m)
+		err := json.Unmarshal(*subMessage, &m)
 		if err != nil {
 			log.WithError(err).Error("error unmarshaling a message")
 			return
@@ -80,7 +83,7 @@ func (peer *Peer) handleMessage(message *Message) {
 		peer.callbacks.OnInv(m)
 	case "getdata":
 		var m *GetDataMessage
-		err := json.Unmarshal([]byte(message.Message), &m)
+		err := json.Unmarshal(*subMessage, &m)
 		if err != nil {
 			log.WithError(err).Error("error unmarshaling a message")
 			return
@@ -89,7 +92,7 @@ func (peer *Peer) handleMessage(message *Message) {
 		peer.callbacks.OnGetData(m)
 	case "notfound":
 		var m *NotFoundMessage
-		err := json.Unmarshal([]byte(message.Message), &m)
+		err := json.Unmarshal(*subMessage, &m)
 		if err != nil {
 			log.WithError(err).Error("error unmarshaling a message")
 			return
@@ -98,7 +101,7 @@ func (peer *Peer) handleMessage(message *Message) {
 		peer.callbacks.OnNotFound(m)
 	case "block":
 		var m *BlockMessage
-		err := json.Unmarshal([]byte(message.Message), &m)
+		err := json.Unmarshal(*subMessage, &m)
 		if err != nil {
 			log.WithError(err).Error("error unmarshaling a message")
 			return
@@ -107,7 +110,7 @@ func (peer *Peer) handleMessage(message *Message) {
 		peer.callbacks.OnBlock(m)
 	case "transaction":
 		var m *TransactionMessage
-		err := json.Unmarshal([]byte(message.Message), &m)
+		err := json.Unmarshal(*subMessage, &m)
 		if err != nil {
 			log.WithError(err).Error("error unmarshaling a message")
 			return
@@ -116,7 +119,7 @@ func (peer *Peer) handleMessage(message *Message) {
 		peer.callbacks.OnTransaction(m)
 	case "getblocks":
 		var m *GetBlocksMessage
-		err := json.Unmarshal([]byte(message.Message), &m)
+		err := json.Unmarshal(*subMessage, &m)
 		if err != nil {
 			log.WithError(err).Error("error unmarshaling a message")
 			return
@@ -125,7 +128,7 @@ func (peer *Peer) handleMessage(message *Message) {
 		peer.callbacks.OnGetBlocks(m)
 	case "getmempool":
 		var m *GetMempoolMessage
-		err := json.Unmarshal([]byte(message.Message), &m)
+		err := json.Unmarshal(*subMessage, &m)
 		if err != nil {
 			log.WithError(err).Error("error unmarshaling a message")
 			return
