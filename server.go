@@ -29,8 +29,10 @@ func (server *Server) newServerPeer(conn net.Conn) *ServerPeer {
 	}
 
 	peer.Peer = network.NewPeer(&network.PeerCallbacks{
-		OnReady:  peer.onReady,
-		OnWhoami: peer.onWhoami,
+		OnReady:     peer.onReady,
+		OnWhoami:    peer.onWhoami,
+		OnInv:       peer.onInv,
+		OnGetBlocks: peer.onGetBlocks,
 	})
 
 	peer.Peer.AttachConn(conn)
@@ -82,10 +84,6 @@ func NewServer(blockchain *blockchain.Blockchain, mempool *mempool.Mempool) *Ser
 func (server *Server) registerAndRunPeer(peer *ServerPeer) {
 	server.peers = append(server.peers, peer)
 	go peer.Run()
-
-	if !server.synced {
-		server.syncWith(peer)
-	}
 }
 
 func (server *Server) syncWith(peer *ServerPeer) {
@@ -184,6 +182,10 @@ func (peer *ServerPeer) onWhoami(message *network.WhoamiMessage) {
 	}
 
 	log.WithField("peer", peer).Info("connection established")
+
+	if !peer.server.synced {
+		peer.server.syncWith(peer)
+	}
 }
 
 func (peer *ServerPeer) onInv(message *network.InvMessage) {

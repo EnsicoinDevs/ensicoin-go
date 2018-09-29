@@ -62,35 +62,75 @@ func (peer *Peer) handleMessage(message *Message) {
 	switch message.Type {
 	case "whoami":
 		var m *WhoamiMessage
-		json.Unmarshal([]byte(message.Message), m)
+		err := json.Unmarshal([]byte(message.Message), &m)
+		if err != nil {
+			log.WithError(err).Error("error unmarshaling a message")
+			return
+		}
+
 		peer.callbacks.OnWhoami(m)
 	case "inv":
 		var m *InvMessage
-		json.Unmarshal([]byte(message.Message), m)
+		err := json.Unmarshal([]byte(message.Message), &m)
+		if err != nil {
+			log.WithError(err).Error("error unmarshaling a message")
+			return
+		}
+
 		peer.callbacks.OnInv(m)
 	case "getdata":
 		var m *GetDataMessage
-		json.Unmarshal([]byte(message.Message), m)
+		err := json.Unmarshal([]byte(message.Message), &m)
+		if err != nil {
+			log.WithError(err).Error("error unmarshaling a message")
+			return
+		}
+
 		peer.callbacks.OnGetData(m)
 	case "notfound":
 		var m *NotFoundMessage
-		json.Unmarshal([]byte(message.Message), m)
+		err := json.Unmarshal([]byte(message.Message), &m)
+		if err != nil {
+			log.WithError(err).Error("error unmarshaling a message")
+			return
+		}
+
 		peer.callbacks.OnNotFound(m)
 	case "block":
 		var m *BlockMessage
-		json.Unmarshal([]byte(message.Message), m)
+		err := json.Unmarshal([]byte(message.Message), &m)
+		if err != nil {
+			log.WithError(err).Error("error unmarshaling a message")
+			return
+		}
+
 		peer.callbacks.OnBlock(m)
 	case "transaction":
 		var m *TransactionMessage
-		json.Unmarshal([]byte(message.Message), m)
+		err := json.Unmarshal([]byte(message.Message), &m)
+		if err != nil {
+			log.WithError(err).Error("error unmarshaling a message")
+			return
+		}
+
 		peer.callbacks.OnTransaction(m)
 	case "getblocks":
 		var m *GetBlocksMessage
-		json.Unmarshal([]byte(message.Message), m)
+		err := json.Unmarshal([]byte(message.Message), &m)
+		if err != nil {
+			log.WithError(err).Error("error unmarshaling a message")
+			return
+		}
+
 		peer.callbacks.OnGetBlocks(m)
 	case "getmempool":
 		var m *GetMempoolMessage
-		json.Unmarshal([]byte(message.Message), m)
+		err := json.Unmarshal([]byte(message.Message), &m)
+		if err != nil {
+			log.WithError(err).Error("error unmarshaling a message")
+			return
+		}
+
 		peer.callbacks.OnGetMempool(m)
 	}
 }
