@@ -16,11 +16,11 @@ func (message *Message) MarshalJSON() ([]byte, error) {
 	type Alias Message
 
 	return json.Marshal(&struct {
-		*Alias
 		Timestamp int64 `json:"timestamp"`
+		*Alias
 	}{
-		Alias:     (*Alias)(message),
 		Timestamp: message.Timestamp.Unix(),
+		Alias:     (*Alias)(message),
 	})
 }
 

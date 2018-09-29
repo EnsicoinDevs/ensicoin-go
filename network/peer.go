@@ -146,7 +146,7 @@ func (peer *Peer) Send(messageType string, message interface{}) error {
 		Message:   message,
 	}
 
-	finalMessageBytes, err := json.Marshal(finalMessage)
+	finalMessageBytes, err := json.Marshal(&finalMessage)
 
 	if err != nil {
 		return errors.Wrap(err, "error marshaling the final message")
