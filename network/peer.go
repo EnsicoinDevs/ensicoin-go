@@ -139,18 +139,11 @@ func (peer *Peer) handleMessage(message *Message, subMessage *json.RawMessage) {
 }
 
 func (peer *Peer) Send(messageType string, message interface{}) error {
-	messageBytes, err := json.Marshal(message)
-	if err != nil {
-		return errors.Wrap(err, "error marshaling the message")
-	}
-
-	messageString := string(messageBytes)
-
 	finalMessage := Message{
 		Magic:     consensus.NETWORK_MAGIC_NUMBER,
 		Type:      messageType,
 		Timestamp: time.Now(),
-		Message:   messageString,
+		Message:   message,
 	}
 
 	finalMessageBytes, err := json.Marshal(finalMessage)
