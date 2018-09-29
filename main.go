@@ -13,6 +13,8 @@ import (
 )
 
 func main() {
+	log.SetLevel(log.DebugLevel)
+
 	log.Info("ENSICOIN-GO is starting")
 
 	blockchain := blockchain.NewBlockchain()

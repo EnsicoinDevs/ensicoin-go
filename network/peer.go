@@ -45,7 +45,8 @@ func (peer *Peer) Run() {
 		var message Message
 		err := jsonDecoder.Decode(&message)
 		if err != nil {
-			log.WithError(err).Fatal("error decoding a message")
+			log.WithError(err).Error("error decoding a message")
+			return
 		}
 
 		go peer.handleMessage(&message)
@@ -53,6 +54,11 @@ func (peer *Peer) Run() {
 }
 
 func (peer *Peer) handleMessage(message *Message) {
+	log.WithFields(log.Fields{
+		"peer":    peer,
+		"message": message,
+	}).Info("message received")
+
 	switch message.Type {
 	case "whoami":
 		var m *WhoamiMessage
@@ -114,6 +120,11 @@ func (peer *Peer) Send(messageType string, message interface{}) error {
 	if err != nil {
 		return errors.Wrap(err, "error writing the message")
 	}
+
+	log.WithFields(log.Fields{
+		"peer":    peer,
+		"message": finalMessage,
+	}).Info("message sent")
 
 	return nil
 }
