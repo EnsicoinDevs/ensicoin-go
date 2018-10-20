@@ -147,8 +147,7 @@ func (server *Server) handleBlocksInvs() {
 }
 
 func (server *Server) handleTransactionsInvs() {
-	for inv := range server.transactionsInvs {
-		_ = inv
+	for _ = range server.transactionsInvs {
 	}
 }
 
@@ -205,6 +204,13 @@ func (peer *ServerPeer) onInv(message *network.InvMessage) {
 			"message": message,
 		}).Error("unknown inv type")
 	}
+}
+
+func (peer *ServerPeer) onBlock(message *network.BlockMessage) {
+}
+
+func (peer *ServerPeer) onTransaction(message *network.TransactionMessage) {
+
 }
 
 func (peer *ServerPeer) onGetBlocks(message *network.GetBlocksMessage) {

@@ -18,9 +18,9 @@ type BlockHeader struct {
 }
 
 type Block struct {
-	Hash         string         `json:"hash"`
-	Header       BlockHeader    `json:"header"`
-	Transactions []*Transaction `json:"transactions"`
+	Hash         string      `json:"hash"`
+	Header       BlockHeader `json:"header"`
+	Transactions []*Tx       `json:"transactions"`
 }
 
 func (block *Block) Validate() bool {

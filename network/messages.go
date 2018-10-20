@@ -70,9 +70,24 @@ type BlockMessage struct {
 	Transactions []TransactionMessage `json:"transactions"`
 }
 
+type TransactionInput struct {
+	PreviousOutput struct {
+		TransactionHash string `json:"transactionHash"`
+		Index           int    `json:"index"`
+	} `json:"previousOutput"`
+	Script []string `json:"script"`
+}
+
+type TransactionOutput struct {
+	Value  uint64   `json:"value"`
+	Script []string `json:"script"`
+}
+
 type TransactionMessage struct {
-	Version int      `json:"version"`
-	Flags   []string `json:"flags"`
+	Version int                 `json:"version"`
+	Flags   []string            `json:"flags"`
+	Inputs  []TransactionInput  `json:"inputs"`
+	Outputs []TransactionOutput `json:"outputs"`
 }
 
 type GetBlocksMessage struct {

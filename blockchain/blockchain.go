@@ -153,3 +153,7 @@ func (blockchain *Blockchain) FindBlockHashesStartingAt(hash string) ([]string, 
 
 	return hashes, nil
 }
+
+func (blockchain *Blockchain) HandleBlockMessage() {
+
+}

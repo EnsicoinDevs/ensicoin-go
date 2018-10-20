@@ -6,31 +6,45 @@ import (
 )
 
 type Mempool struct {
-	transactions map[string]*blockchain.Transaction
-	mutex        sync.RWMutex
+	txs   map[string]*blockchain.Tx
+	mutex sync.RWMutex
 }
 
 func NewMempool() *Mempool {
 	return &Mempool{
-		transactions: make(map[string]*blockchain.Transaction),
+		txs: make(map[string]*blockchain.Tx),
 	}
 }
 
-func (mempool *Mempool) AddTransaction(tx *blockchain.Transaction) {
+func (mempool *Mempool) addTx(tx *blockchain.Tx) {
 	mempool.mutex.Lock()
-	mempool.transactions[tx.Hash] = tx
+	mempool.txs[tx.Hash] = tx
 	mempool.mutex.Unlock()
 }
 
-func (mempool *Mempool) FindTransactionByHash(hash string) *blockchain.Transaction {
+func (mempool *Mempool) ProcessTx(tx *blockchain.Tx) bool {
+	if !tx.IsSane() {
+		return false
+	}
+
+	if tx.IsCoinBase() {
+		return false
+	}
+
+	mempool.addTx(tx)
+
+	return true
+}
+
+func (mempool *Mempool) FindTxByHash(hash string) *blockchain.Tx {
 	mempool.mutex.RLock()
 	defer mempool.mutex.RUnlock()
 
-	return mempool.transactions[hash]
+	return mempool.txs[hash]
 }
 
-func (mempool *Mempool) RemoveTransactionByHash(hash string) {
+func (mempool *Mempool) RemoveTxByHash(hash string) {
 	mempool.mutex.Lock()
-	delete(mempool.transactions, hash)
+	delete(mempool.txs, hash)
 	mempool.mutex.Unlock()
 }
