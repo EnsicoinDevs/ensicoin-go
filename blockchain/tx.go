@@ -3,18 +3,19 @@ package blockchain
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/EnsicoinDevs/ensicoin-go/network"
 	"strconv"
 	"strings"
 )
 
+type TxOutpoint struct {
+	TxHash string
+	Index  uint
+}
+
 type TxInput struct {
-	PreviousOutput struct {
-		TxHash string
-		Index  int
-	}
-	PreviousTxHash      string
-	PreviousOutputIndex int
-	Script              []string
+	PreviousOutput TxOutpoint
+	Script         []string
 }
 
 type TxOutput struct {
@@ -30,6 +31,32 @@ type Tx struct {
 	Outputs []*TxOutput
 }
 
+func NewTxFromTxMessage(txMsg *network.TxMessage) *Tx {
+	tx := Tx{
+		Version: txMsg.Version,
+		Flags:   txMsg.Flags,
+	}
+
+	for _, input := range txMsg.Inputs {
+		tx.Inputs = append(tx.Inputs, &TxInput{
+			PreviousOutput: TxOutpoint{
+				TxHash: input.PreviousOutput.TxHash,
+				Index:  input.PreviousOutput.Index,
+			},
+			Script: input.Script,
+		})
+	}
+
+	for _, output := range txMsg.Outputs {
+		tx.Outputs = append(tx.Outputs, &TxOutput{
+			Value:  output.Value,
+			Script: output.Script,
+		})
+	}
+
+	return &tx
+}
+
 func (tx *Tx) ComputeHash() {
 	h := sha256.New()
 
@@ -37,8 +64,8 @@ func (tx *Tx) ComputeHash() {
 	h.Write([]byte(strings.Join(tx.Flags, "")))
 
 	for _, input := range tx.Inputs {
-		h.Write([]byte(input.PreviousTxHash))
-		h.Write([]byte(strconv.Itoa(input.PreviousOutputIndex)))
+		h.Write([]byte(input.PreviousOutput.TxHash))
+		h.Write([]byte(strconv.FormatUint(uint64(input.PreviousOutput.Index), 10)))
 	}
 
 	for _, output := range tx.Outputs {

@@ -6,6 +6,7 @@ import (
 	"github.com/EnsicoinDevs/ensicoin-go/consensus"
 	"github.com/EnsicoinDevs/ensicoin-go/mempool"
 	"github.com/EnsicoinDevs/ensicoin-go/network"
+	"github.com/EnsicoinDevs/ensicoin-go/peer"
 	log "github.com/sirupsen/logrus"
 	"net"
 )
@@ -16,44 +17,47 @@ type invWithPeer struct {
 }
 
 type ServerPeer struct {
-	*network.Peer
-	Ingoing   bool
-	Connected bool
+	*peer.Peer
 
 	server *Server
 }
 
-func (server *Server) newServerPeer(conn net.Conn) *ServerPeer {
-	peer := &ServerPeer{
+func (server *Server) newServerPeer() *ServerPeer {
+	return &ServerPeer{
 		server: server,
 	}
+}
 
-	peer.Peer = network.NewPeer(&network.PeerCallbacks{
-		OnReady:     peer.onReady,
-		OnWhoami:    peer.onWhoami,
-		OnInv:       peer.onInv,
-		OnGetBlocks: peer.onGetBlocks,
-	})
-
-	peer.Peer.AttachConn(conn)
-
-	return peer
+func (sp *ServerPeer) newConfig() *peer.Config {
+	return &peer.Config{
+		Callbacks: peer.PeerCallbacks{
+			OnReady:     sp.onReady,
+			OnWhoami:    sp.onWhoami,
+			OnInv:       sp.onInv,
+			OnGetBlocks: sp.onGetBlocks,
+			OnTx:        sp.onTx,
+		},
+	}
 }
 
 func (server *Server) newIngoingServerPeer(conn net.Conn) *ServerPeer {
-	peer := server.newServerPeer(conn)
+	sp := server.newServerPeer()
 
-	peer.Ingoing = true
+	sp.Peer = peer.NewIngoingPeer(sp.newConfig())
 
-	return peer
+	sp.AttachConn(conn)
+
+	return sp
 }
 
 func (server *Server) newOutgoingServerPeer(conn net.Conn) *ServerPeer {
-	peer := server.newServerPeer(conn)
+	sp := server.newServerPeer()
 
-	peer.Ingoing = false
+	sp.Peer = peer.NewOutgoingPeer(sp.newConfig())
 
-	return peer
+	sp.AttachConn(conn)
+
+	return sp
 }
 
 type Server struct {
@@ -81,9 +85,8 @@ func NewServer(blockchain *blockchain.Blockchain, mempool *mempool.Mempool) *Ser
 	return server
 }
 
-func (server *Server) registerAndRunPeer(peer *ServerPeer) {
+func (server *Server) registerPeer(peer *ServerPeer) {
 	server.peers = append(server.peers, peer)
-	go peer.Run()
 }
 
 func (server *Server) syncWith(peer *ServerPeer) {
@@ -116,7 +119,7 @@ func (server *Server) Start() {
 			log.WithError(err).Error("error accepting a new connection")
 		} else {
 			log.Info("we have a new ingoing peer")
-			server.registerAndRunPeer(server.newIngoingServerPeer(conn))
+			server.registerPeer(server.newIngoingServerPeer(conn))
 		}
 	}
 }
@@ -147,7 +150,24 @@ func (server *Server) handleBlocksInvs() {
 }
 
 func (server *Server) handleTransactionsInvs() {
-	for _ = range server.transactionsInvs {
+	for inv := range server.transactionsInvs {
+		invToSend := network.InvMessage{
+			Type: "t",
+		}
+
+		for _, hash := range inv.hashes {
+			tx := server.mempool.FindTxByHash(hash)
+
+			if tx == nil {
+				invToSend.Hashes = append(invToSend.Hashes, hash)
+			}
+		}
+
+		if len(invToSend.Hashes) > 0 {
+			inv.peer.Send("getdata", &network.GetDataMessage{
+				Inv: invToSend,
+			})
+		}
 	}
 }
 
@@ -156,34 +176,34 @@ func (server *Server) Stop() {
 }
 
 func (server *Server) RegisterOutgoingPeer(conn net.Conn) {
-	server.registerAndRunPeer(server.newOutgoingServerPeer(conn))
+	server.registerPeer(server.newOutgoingServerPeer(conn))
 }
 
-func (peer *ServerPeer) onReady() {
-	if !peer.Ingoing {
-		peer.Send("whoami", &network.WhoamiMessage{
+func (sp *ServerPeer) onReady() {
+	if !sp.Ingoing() {
+		sp.Send("whoami", &network.WhoamiMessage{
 			Version: 0,
 		})
 	}
 }
 
-func (peer *ServerPeer) onWhoami(message *network.WhoamiMessage) {
-	log.WithField("peer", peer).Info("whoami received")
+func (sp *ServerPeer) onWhoami(message *network.WhoamiMessage) {
+	log.WithField("peer", sp).Info("whoami received")
 
-	if peer.Ingoing {
-		peer.Send("whoami", &network.WhoamiMessage{
+	if sp.Ingoing() {
+		sp.Send("whoami", &network.WhoamiMessage{
 			Version: 0,
 		})
 
-		peer.Connected = true
+		// sp.Connected = true
 	} else {
-		peer.Connected = true
+		// sp.Connected = true
 	}
 
-	log.WithField("peer", peer).Info("connection established")
+	log.WithField("peer", sp).Info("connection established")
 
-	if !peer.server.synced {
-		peer.server.syncWith(peer)
+	if !sp.server.synced {
+		sp.server.syncWith(sp)
 	}
 }
 
@@ -207,10 +227,28 @@ func (peer *ServerPeer) onInv(message *network.InvMessage) {
 }
 
 func (peer *ServerPeer) onBlock(message *network.BlockMessage) {
+
 }
 
-func (peer *ServerPeer) onTransaction(message *network.TransactionMessage) {
+func (server *Server) broadcastTx(tx *blockchain.Tx, sourcePeer *ServerPeer) {
+	for _, peer := range server.peers {
+		if peer != sourcePeer {
+			peer.Send("inv", &network.InvMessage{
+				Type:   "t",
+				Hashes: []string{tx.Hash},
+			})
+		}
+	}
+}
 
+func (peer *ServerPeer) onTx(message *network.TxMessage) {
+	tx := blockchain.NewTxFromTxMessage(message)
+	tx.ComputeHash()
+	valid := peer.server.mempool.ProcessTx(tx)
+
+	if valid {
+		peer.server.broadcastTx(tx, peer)
+	}
 }
 
 func (peer *ServerPeer) onGetBlocks(message *network.GetBlocksMessage) {

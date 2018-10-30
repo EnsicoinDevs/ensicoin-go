@@ -67,27 +67,27 @@ type BlockMessage struct {
 		Timestamp       time.Time `json:"timestamp"`
 		Nonce           int       `json:"nonce"`
 	} `json:"header"`
-	Transactions []TransactionMessage `json:"transactions"`
+	Txs []TxMessage `json:"transactions"`
 }
 
-type TransactionInput struct {
+type TxInput struct {
 	PreviousOutput struct {
-		TransactionHash string `json:"transactionHash"`
-		Index           int    `json:"index"`
+		TxHash string `json:"transactionHash"`
+		Index  uint   `json:"index"`
 	} `json:"previousOutput"`
 	Script []string `json:"script"`
 }
 
-type TransactionOutput struct {
+type TxOutput struct {
 	Value  uint64   `json:"value"`
 	Script []string `json:"script"`
 }
 
-type TransactionMessage struct {
-	Version int                 `json:"version"`
-	Flags   []string            `json:"flags"`
-	Inputs  []TransactionInput  `json:"inputs"`
-	Outputs []TransactionOutput `json:"outputs"`
+type TxMessage struct {
+	Version int        `json:"version"`
+	Flags   []string   `json:"flags"`
+	Inputs  []TxInput  `json:"inputs"`
+	Outputs []TxOutput `json:"outputs"`
 }
 
 type GetBlocksMessage struct {

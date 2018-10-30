@@ -6,8 +6,9 @@ import (
 )
 
 type Mempool struct {
-	txs   map[string]*blockchain.Tx
-	mutex sync.RWMutex
+	txs     map[string]*blockchain.Tx
+	orphans map[string]*blockchain.Tx
+	mutex   sync.RWMutex
 }
 
 func NewMempool() *Mempool {
@@ -22,6 +23,18 @@ func (mempool *Mempool) addTx(tx *blockchain.Tx) {
 	mempool.mutex.Unlock()
 }
 
+func (mempool *Mempool) findTxByHash(hash string) *blockchain.Tx {
+	mempool.mutex.RLock()
+	defer mempool.mutex.RUnlock()
+
+	tx := mempool.txs[hash]
+	if tx == nil {
+		tx = mempool.orphans[hash]
+	}
+
+	return tx
+}
+
 func (mempool *Mempool) ProcessTx(tx *blockchain.Tx) bool {
 	if !tx.IsSane() {
 		return false
@@ -31,16 +44,17 @@ func (mempool *Mempool) ProcessTx(tx *blockchain.Tx) bool {
 		return false
 	}
 
+	if mempool.findTxByHash(tx.Hash) != nil {
+		return false
+	}
+
 	mempool.addTx(tx)
 
 	return true
 }
 
 func (mempool *Mempool) FindTxByHash(hash string) *blockchain.Tx {
-	mempool.mutex.RLock()
-	defer mempool.mutex.RUnlock()
-
-	return mempool.txs[hash]
+	return mempool.findTxByHash(hash)
 }
 
 func (mempool *Mempool) RemoveTxByHash(hash string) {
