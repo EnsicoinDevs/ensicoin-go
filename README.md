@@ -1,4 +1,4 @@
-# ensicoin-go
+# ensicoincoin
 
 An implementation of ENSICOIN developed in GO.
 
