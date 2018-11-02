@@ -8,8 +8,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/EnsicoinDevs/ensicoin-go/blockchain"
-	"github.com/EnsicoinDevs/ensicoin-go/mempool"
+	"github.com/EnsicoinDevs/ensicoincoin/blockchain"
+	"github.com/EnsicoinDevs/ensicoincoin/mempool"
 )
 
 func main() {

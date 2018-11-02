@@ -2,8 +2,8 @@ package peer
 
 import (
 	"encoding/json"
-	"github.com/EnsicoinDevs/ensicoin-go/consensus"
-	"github.com/EnsicoinDevs/ensicoin-go/network"
+	"github.com/EnsicoinDevs/ensicoincoin/consensus"
+	"github.com/EnsicoinDevs/ensicoincoin/network"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"net"
@@ -93,7 +93,9 @@ func (peer *Peer) handleMessage(message *network.Message, subMessage *json.RawMe
 			return
 		}
 
-		peer.config.Callbacks.OnWhoami(m)
+		if peer.config.Callbacks.OnWhoami != nil {
+			peer.config.Callbacks.OnWhoami(m)
+		}
 	case "inv":
 		var m *network.InvMessage
 		err := json.Unmarshal(*subMessage, &m)
@@ -102,7 +104,9 @@ func (peer *Peer) handleMessage(message *network.Message, subMessage *json.RawMe
 			return
 		}
 
-		peer.config.Callbacks.OnInv(m)
+		if peer.config.Callbacks.OnInv != nil {
+			peer.config.Callbacks.OnInv(m)
+		}
 	case "getdata":
 		var m *network.GetDataMessage
 		err := json.Unmarshal(*subMessage, &m)
@@ -111,7 +115,9 @@ func (peer *Peer) handleMessage(message *network.Message, subMessage *json.RawMe
 			return
 		}
 
-		peer.config.Callbacks.OnGetData(m)
+		if peer.config.Callbacks.OnGetData != nil {
+			peer.config.Callbacks.OnGetData(m)
+		}
 	case "notfound":
 		var m *network.NotFoundMessage
 		err := json.Unmarshal(*subMessage, &m)
@@ -120,7 +126,9 @@ func (peer *Peer) handleMessage(message *network.Message, subMessage *json.RawMe
 			return
 		}
 
-		peer.config.Callbacks.OnNotFound(m)
+		if peer.config.Callbacks.OnNotFound != nil {
+			peer.config.Callbacks.OnNotFound(m)
+		}
 	case "block":
 		var m *network.BlockMessage
 		err := json.Unmarshal(*subMessage, &m)
@@ -129,7 +137,9 @@ func (peer *Peer) handleMessage(message *network.Message, subMessage *json.RawMe
 			return
 		}
 
-		peer.config.Callbacks.OnBlock(m)
+		if peer.config.Callbacks.OnBlock != nil {
+			peer.config.Callbacks.OnBlock(m)
+		}
 	case "transaction":
 		var m *network.TxMessage
 		err := json.Unmarshal(*subMessage, &m)
@@ -138,7 +148,9 @@ func (peer *Peer) handleMessage(message *network.Message, subMessage *json.RawMe
 			return
 		}
 
-		peer.config.Callbacks.OnTx(m)
+		if peer.config.Callbacks.OnTx != nil {
+			peer.config.Callbacks.OnTx(m)
+		}
 	case "getblocks":
 		var m *network.GetBlocksMessage
 		err := json.Unmarshal(*subMessage, &m)
@@ -147,7 +159,9 @@ func (peer *Peer) handleMessage(message *network.Message, subMessage *json.RawMe
 			return
 		}
 
-		peer.config.Callbacks.OnGetBlocks(m)
+		if peer.config.Callbacks.OnGetBlocks != nil {
+			peer.config.Callbacks.OnGetBlocks(m)
+		}
 	case "getmempool":
 		var m *network.GetMempoolMessage
 		err := json.Unmarshal(*subMessage, &m)
@@ -156,7 +170,9 @@ func (peer *Peer) handleMessage(message *network.Message, subMessage *json.RawMe
 			return
 		}
 
-		peer.config.Callbacks.OnGetMempool(m)
+		if peer.config.Callbacks.OnGetMempool != nil {
+			peer.config.Callbacks.OnGetMempool(m)
+		}
 	}
 }
 

@@ -3,7 +3,7 @@ package blockchain
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"github.com/EnsicoinDevs/ensicoin-go/network"
+	"github.com/EnsicoinDevs/ensicoincoin/network"
 	"strconv"
 	"strings"
 )

@@ -2,11 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/EnsicoinDevs/ensicoin-go/blockchain"
-	"github.com/EnsicoinDevs/ensicoin-go/consensus"
-	"github.com/EnsicoinDevs/ensicoin-go/mempool"
-	"github.com/EnsicoinDevs/ensicoin-go/network"
-	"github.com/EnsicoinDevs/ensicoin-go/peer"
+	"github.com/EnsicoinDevs/ensicoincoin/blockchain"
+	"github.com/EnsicoinDevs/ensicoincoin/consensus"
+	"github.com/EnsicoinDevs/ensicoincoin/mempool"
+	"github.com/EnsicoinDevs/ensicoincoin/network"
+	"github.com/EnsicoinDevs/ensicoincoin/peer"
 	log "github.com/sirupsen/logrus"
 	"net"
 )
