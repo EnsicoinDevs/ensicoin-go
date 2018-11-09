@@ -55,6 +55,11 @@ func (blockchain *Blockchain) Load() error {
 			return errors.Wrap(err, "error creating the following bucket")
 		}
 
+		_, err = tx.CreateBucketIfNotExists([]byte("utxos"))
+		if err != nil {
+			return errors.Wrap(err, "error creating the utxos bucket")
+		}
+
 		return nil
 	})
 
@@ -65,12 +70,40 @@ func (blockchain *Blockchain) Load() error {
 	return nil
 }
 
-func (blockchain *Blockchain) StoreBlock(block *Block) {
+func (blockchain *Blockchain) FetchUtxos(tx *Tx) (*Utxos, error) {
+	utxos := newUtxos()
+
+	err := blockchain.db.View(func(btx *bolt.Tx) error {
+		b := btx.Bucket([]byte("utxos"))
+
+		for _, input := range tx.Inputs {
+			outpoint := input.PreviousOutput
+			outpointBytes, err := json.Marshal(outpoint)
+			if err != nil {
+				return errors.Wrap(err, "error marshaling an outpoint")
+			}
+
+			utxoBytes := b.Get(outpointBytes)
+			var utxo *UtxoEntry
+			if err = json.Unmarshal(utxoBytes, &utxo); err != nil {
+				return errors.Wrap(err, "error unmarshaling an utxo entry")
+			}
+
+			utxos.AddEntry(outpoint, utxo)
+		}
+
+		return nil
+	})
+
+	return utxos, err
+}
+
+func (blockchain *Blockchain) StoreBlock(block *Block) error {
 	if block.Hash == "" {
 		block.ComputeHash()
 	}
 
-	blockchain.db.Update(func(tx *bolt.Tx) error {
+	err := blockchain.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("blocks"))
 
 		blockBytes, err := json.Marshal(block)
@@ -82,6 +115,8 @@ func (blockchain *Blockchain) StoreBlock(block *Block) {
 
 		return nil
 	})
+
+	return err
 }
 
 func (blockchain *Blockchain) FindBlockByHash(hash string) (*Block, error) {

@@ -2,11 +2,18 @@ package mempool
 
 import (
 	"github.com/EnsicoinDevs/ensicoincoin/blockchain"
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"sync"
 )
 
+type Config struct {
+	FetchUtxos func(tx *blockchain.Tx) (*blockchain.Utxos, error)
+}
+
 type Mempool struct {
+	config Config
+
 	txs              map[string]*blockchain.Tx
 	orphans          map[string]*blockchain.Tx
 	outpoints        map[blockchain.TxOutpoint]*blockchain.Tx
@@ -14,8 +21,10 @@ type Mempool struct {
 	mutex            sync.RWMutex
 }
 
-func NewMempool() *Mempool {
+func NewMempool(config *Config) *Mempool {
 	return &Mempool{
+		config: *config,
+
 		txs:              make(map[string]*blockchain.Tx),
 		orphans:          make(map[string]*blockchain.Tx),
 		outpoints:        make(map[blockchain.TxOutpoint]*blockchain.Tx),
@@ -52,6 +61,15 @@ func (mempool *Mempool) findTxByHash(hash string) *blockchain.Tx {
 	return tx
 }
 
+func (mempool *Mempool) fetchUtxos(tx *blockchain.Tx) (*blockchain.Utxos, error) {
+	utxos, err := mempool.config.FetchUtxos(tx)
+	if err != nil {
+		return nil, errors.Wrap(err, "error fetching utxos")
+	}
+
+	return utxos, nil
+}
+
 func (mempool *Mempool) validateTx(tx *blockchain.Tx) (bool, []string) {
 	if !tx.IsSane() {
 		return false, nil
@@ -64,6 +82,10 @@ func (mempool *Mempool) validateTx(tx *blockchain.Tx) (bool, []string) {
 	if mempool.findTxByHash(tx.Hash) != nil {
 		return false, nil
 	}
+
+	utxos, _ := mempool.fetchUtxos(tx)
+
+	_ = utxos
 
 	return true, nil
 }

@@ -20,7 +20,9 @@ func main() {
 	blockchain := blockchain.NewBlockchain()
 	blockchain.Load()
 
-	mempool := mempool.NewMempool()
+	mempool := mempool.NewMempool(&mempool.Config{
+		FetchUtxos: blockchain.FetchUtxos,
+	})
 
 	server := NewServer(blockchain, mempool)
 
