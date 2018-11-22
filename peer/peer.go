@@ -1,18 +1,17 @@
 package peer
 
 import (
-	"encoding/json"
-	"github.com/EnsicoinDevs/ensicoincoin/consensus"
+	"fmt"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"net"
-	"time"
 )
 
 type PeerCallbacks struct {
 	OnReady      func()
 	OnWhoami     func(*network.WhoamiMessage)
+	OnWhoamiAck  func(*network.WhoamiAckMessage)
 	OnInv        func(*network.InvMessage)
 	OnGetData    func(*network.GetDataMessage)
 	OnNotFound   func(*network.NotFoundMessage)
@@ -31,6 +30,10 @@ type Peer struct {
 
 	config  Config
 	ingoing bool
+}
+
+func (peer Peer) String() string {
+	return fmt.Sprintf("Peer[addr=%s]", peer.conn.RemoteAddr().String())
 }
 
 func newPeer(config *Config, ingoing bool) *Peer {
@@ -61,114 +64,77 @@ func (peer *Peer) AttachConn(conn net.Conn) {
 func (peer *Peer) run() {
 	peer.config.Callbacks.OnReady()
 
-	jsonDecoder := json.NewDecoder(peer.conn)
+	var message network.Message
+	var err error
 
 	for {
-		var subMessage json.RawMessage
-		message := network.Message{
-			Message: &subMessage,
-		}
-		err := jsonDecoder.Decode(&message)
+		message, err = network.ReadMessage(peer.conn)
 		if err != nil {
-			log.WithError(err).Error("error decoding a message")
+			log.WithError(err).Error("error reading a message")
 			return
 		}
 
-		go peer.handleMessage(&message, &subMessage)
+		go peer.handleMessage(message)
 	}
 }
 
-func (peer *Peer) handleMessage(message *network.Message, subMessage *json.RawMessage) {
+func (peer *Peer) handleMessage(message network.Message) {
 	log.WithFields(log.Fields{
 		"peer":    peer,
 		"message": message,
 	}).Info("message received")
 
-	switch message.Type {
+	switch message.MsgType() {
 	case "whoami":
-		var m *network.WhoamiMessage
-		err := json.Unmarshal(*subMessage, &m)
-		if err != nil {
-			log.WithError(err).Error("error unmarshaling a message")
-			return
-		}
+		m := message.(*network.WhoamiMessage)
 
 		if peer.config.Callbacks.OnWhoami != nil {
 			peer.config.Callbacks.OnWhoami(m)
 		}
-	case "inv":
-		var m *network.InvMessage
-		err := json.Unmarshal(*subMessage, &m)
-		if err != nil {
-			log.WithError(err).Error("error unmarshaling a message")
-			return
+	case "whoamiack":
+		m := message.(*network.WhoamiAckMessage)
+
+		if peer.config.Callbacks.OnWhoamiAck != nil {
+			peer.config.Callbacks.OnWhoamiAck(m)
 		}
+	case "inv":
+		m := message.(*network.InvMessage)
 
 		if peer.config.Callbacks.OnInv != nil {
 			peer.config.Callbacks.OnInv(m)
 		}
 	case "getdata":
-		var m *network.GetDataMessage
-		err := json.Unmarshal(*subMessage, &m)
-		if err != nil {
-			log.WithError(err).Error("error unmarshaling a message")
-			return
-		}
+		m := message.(*network.GetDataMessage)
 
 		if peer.config.Callbacks.OnGetData != nil {
 			peer.config.Callbacks.OnGetData(m)
 		}
 	case "notfound":
-		var m *network.NotFoundMessage
-		err := json.Unmarshal(*subMessage, &m)
-		if err != nil {
-			log.WithError(err).Error("error unmarshaling a message")
-			return
-		}
+		m := message.(*network.NotFoundMessage)
 
 		if peer.config.Callbacks.OnNotFound != nil {
 			peer.config.Callbacks.OnNotFound(m)
 		}
 	case "block":
-		var m *network.BlockMessage
-		err := json.Unmarshal(*subMessage, &m)
-		if err != nil {
-			log.WithError(err).Error("error unmarshaling a message")
-			return
-		}
+		m := message.(*network.BlockMessage)
 
 		if peer.config.Callbacks.OnBlock != nil {
 			peer.config.Callbacks.OnBlock(m)
 		}
-	case "transaction":
-		var m *network.TxMessage
-		err := json.Unmarshal(*subMessage, &m)
-		if err != nil {
-			log.WithError(err).Error("error unmarshaling a message")
-			return
-		}
+	case "tx":
+		m := message.(*network.TxMessage)
 
 		if peer.config.Callbacks.OnTx != nil {
 			peer.config.Callbacks.OnTx(m)
 		}
 	case "getblocks":
-		var m *network.GetBlocksMessage
-		err := json.Unmarshal(*subMessage, &m)
-		if err != nil {
-			log.WithError(err).Error("error unmarshaling a message")
-			return
-		}
+		m := message.(*network.GetBlocksMessage)
 
 		if peer.config.Callbacks.OnGetBlocks != nil {
 			peer.config.Callbacks.OnGetBlocks(m)
 		}
 	case "getmempool":
-		var m *network.GetMempoolMessage
-		err := json.Unmarshal(*subMessage, &m)
-		if err != nil {
-			log.WithError(err).Error("error unmarshaling a message")
-			return
-		}
+		m := message.(*network.GetMempoolMessage)
 
 		if peer.config.Callbacks.OnGetMempool != nil {
 			peer.config.Callbacks.OnGetMempool(m)
@@ -176,28 +142,15 @@ func (peer *Peer) handleMessage(message *network.Message, subMessage *json.RawMe
 	}
 }
 
-func (peer *Peer) Send(messageType string, message interface{}) error {
-	finalMessage := network.Message{
-		Magic:     consensus.NETWORK_MAGIC_NUMBER,
-		Type:      messageType,
-		Timestamp: time.Now(),
-		Message:   message,
-	}
-
-	finalMessageBytes, err := json.Marshal(&finalMessage)
-
-	if err != nil {
-		return errors.Wrap(err, "error marshaling the final message")
-	}
-
-	_, err = peer.conn.Write(finalMessageBytes)
+func (peer *Peer) Send(message network.Message) error {
+	err := network.WriteMessage(peer.conn, message)
 	if err != nil {
 		return errors.Wrap(err, "error writing the message")
 	}
 
 	log.WithFields(log.Fields{
 		"peer":    peer,
-		"message": finalMessage,
+		"message": message,
 	}).Info("message sent")
 
 	return nil

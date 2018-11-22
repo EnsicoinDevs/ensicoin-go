@@ -6,16 +6,16 @@ import (
 
 type UtxoEntry struct {
 	amount      uint64
-	script      []string
+	script      []byte
 	blockHeight int
 
 	coinBase bool
 }
 
 type utxoEntryJSON struct {
-	amount      uint64   `json:"amount"`
-	script      []string `json:"script"`
-	blockHeight int      `json:"blockHeight"`
+	amount      uint64 `json:"amount"`
+	script      []byte `json:"script"`
+	blockHeight int    `json:"blockHeight"`
 
 	coinBase bool `json:"coinbase"`
 }
@@ -52,7 +52,7 @@ func (entry *UtxoEntry) Amount() uint64 {
 	return entry.amount
 }
 
-func (entry *UtxoEntry) Script() []string {
+func (entry *UtxoEntry) Script() []byte {
 	return entry.script
 }
 
@@ -65,20 +65,20 @@ func (entry *UtxoEntry) IsCoinBase() bool {
 }
 
 type Utxos struct {
-	entries map[TxOutpoint]*UtxoEntry
+	entries map[Outpoint]*UtxoEntry
 }
 
 func newUtxos() *Utxos {
 	return &Utxos{
-		entries: make(map[TxOutpoint]*UtxoEntry),
+		entries: make(map[Outpoint]*UtxoEntry),
 	}
 }
 
-func (utxos *Utxos) AddEntry(outpoint TxOutpoint, entry *UtxoEntry) {
+func (utxos *Utxos) AddEntry(outpoint Outpoint, entry *UtxoEntry) {
 	utxos.entries[outpoint] = entry
 }
 
-func (utxos *Utxos) AddEntryWithTx(outpoint TxOutpoint, tx *Tx, blockHeight int) {
+func (utxos *Utxos) AddEntryWithTx(outpoint Outpoint, tx *Tx, blockHeight int) {
 	output := tx.Outputs[outpoint.Index]
 
 	utxos.AddEntry(outpoint, &UtxoEntry{
@@ -89,6 +89,6 @@ func (utxos *Utxos) AddEntryWithTx(outpoint TxOutpoint, tx *Tx, blockHeight int)
 	})
 }
 
-func (utxos *Utxos) FindEntry(outpoint TxOutpoint) *UtxoEntry {
+func (utxos *Utxos) FindEntry(outpoint Outpoint) *UtxoEntry {
 	return utxos.entries[outpoint]
 }

@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"github.com/EnsicoinDevs/ensicoincoin/blockchain"
-	"github.com/EnsicoinDevs/ensicoincoin/consensus"
 	"github.com/EnsicoinDevs/ensicoincoin/mempool"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
 	"github.com/EnsicoinDevs/ensicoincoin/peer"
@@ -12,8 +11,8 @@ import (
 )
 
 type invWithPeer struct {
-	hashes []string
-	peer   *ServerPeer
+	msg  *network.InvMessage
+	peer *ServerPeer
 }
 
 type ServerPeer struct {
@@ -33,6 +32,7 @@ func (sp *ServerPeer) newConfig() *peer.Config {
 		Callbacks: peer.PeerCallbacks{
 			OnReady:     sp.onReady,
 			OnWhoami:    sp.onWhoami,
+			OnWhoamiAck: sp.onWhoamiAck,
 			OnInv:       sp.onInv,
 			OnGetBlocks: sp.onGetBlocks,
 			OnTx:        sp.onTx,
@@ -64,8 +64,7 @@ type Server struct {
 	blockchain *blockchain.Blockchain
 	mempool    *mempool.Mempool
 
-	blocksInvs       chan *invWithPeer
-	transactionsInvs chan *invWithPeer
+	invs chan *invWithPeer
 
 	peers    []*ServerPeer
 	listener net.Listener
@@ -78,8 +77,7 @@ func NewServer(blockchain *blockchain.Blockchain, mempool *mempool.Mempool) *Ser
 		blockchain: blockchain,
 		mempool:    mempool,
 
-		blocksInvs:       make(chan *invWithPeer),
-		transactionsInvs: make(chan *invWithPeer),
+		invs: make(chan *invWithPeer),
 	}
 
 	return server
@@ -96,22 +94,23 @@ func (server *Server) syncWith(peer *ServerPeer) {
 		return
 	}
 
-	peer.Send("getblocks", &network.GetBlocksMessage{
-		Hashes: []string{longestChain.Hash},
-	})
+	_ = longestChain
+
+	//peer.Send("getblocks", &network.GetBlocksMessage{
+	//	Hashes: []string{longestChain.Hash},
+	//})
 
 	server.synced = true
 }
 
 func (server *Server) Start() {
 	var err error
-	server.listener, err = net.Listen("tcp", fmt.Sprintf(":%d", consensus.INGOING_PORT))
+	server.listener, err = net.Listen("tcp", fmt.Sprintf(":%d", peerPort))
 	if err != nil {
 		log.WithError(err).Panic("error launching the tcp server")
 	}
 
-	go server.handleBlocksInvs()
-	go server.handleTransactionsInvs()
+	go server.handleInvs()
 
 	for {
 		conn, err := server.listener.Accept()
@@ -124,48 +123,34 @@ func (server *Server) Start() {
 	}
 }
 
-func (server *Server) handleBlocksInvs() {
-	for inv := range server.blocksInvs {
-		invToSend := network.InvMessage{
-			Type: "b",
-		}
+func (server *Server) handleInvs() {
+	for inv := range server.invs {
+		var inventory []*network.InvVect
 
-		for _, hash := range inv.hashes {
-			block, err := server.blockchain.FindBlockByHash(hash)
-			if err != nil {
-				log.WithError(err).WithField("hash", hash).Error("error finding a block")
-			}
+		for _, invVect := range inv.msg.Inventory {
+			switch invVect.InvType {
+			case network.INV_VECT_BLOCK:
+				block, err := server.blockchain.FindBlockByHash(invVect.Hash)
+				if err != nil {
+					log.WithError(err).WithField("hash", invVect.Hash).Error("error finding a block")
+				}
 
-			if block == nil {
-				invToSend.Hashes = append(invToSend.Hashes, hash)
-			}
-		}
-
-		if len(invToSend.Hashes) > 0 {
-			inv.peer.Send("getdata", &network.GetDataMessage{
-				Inv: invToSend,
-			})
-		}
-	}
-}
-
-func (server *Server) handleTransactionsInvs() {
-	for inv := range server.transactionsInvs {
-		invToSend := network.InvMessage{
-			Type: "t",
-		}
-
-		for _, hash := range inv.hashes {
-			tx := server.mempool.FindTxByHash(hash)
-
-			if tx == nil {
-				invToSend.Hashes = append(invToSend.Hashes, hash)
+				if block == nil {
+					inventory = append(inventory, &network.InvVect{
+						InvType: network.INV_VECT_BLOCK,
+						Hash:    invVect.Hash,
+					})
+				}
+			case network.INV_VECT_TX:
+				// TODO: handle tx inv
+			default:
+				log.Error("unknown inv vect type")
 			}
 		}
 
-		if len(invToSend.Hashes) > 0 {
-			inv.peer.Send("getdata", &network.GetDataMessage{
-				Inv: invToSend,
+		if len(inventory) > 0 {
+			inv.peer.Send(&network.GetDataMessage{
+				Inventory: inventory,
 			})
 		}
 	}
@@ -181,7 +166,7 @@ func (server *Server) RegisterOutgoingPeer(conn net.Conn) {
 
 func (sp *ServerPeer) onReady() {
 	if !sp.Ingoing() {
-		sp.Send("whoami", &network.WhoamiMessage{
+		sp.Send(&network.WhoamiMessage{
 			Version: 0,
 		})
 	}
@@ -191,38 +176,29 @@ func (sp *ServerPeer) onWhoami(message *network.WhoamiMessage) {
 	log.WithField("peer", sp).Info("whoami received")
 
 	if sp.Ingoing() {
-		sp.Send("whoami", &network.WhoamiMessage{
+		sp.Send(&network.WhoamiMessage{
 			Version: 0,
 		})
-
 		// sp.Connected = true
 	} else {
 		// sp.Connected = true
 	}
 
-	log.WithField("peer", sp).Info("connection established")
+	sp.Send(&network.WhoamiAckMessage{})
 
 	if !sp.server.synced {
 		sp.server.syncWith(sp)
 	}
 }
 
+func (sp *ServerPeer) onWhoamiAck(message *network.WhoamiAckMessage) {
+	log.WithField("peer", sp).Info("connection established")
+}
+
 func (peer *ServerPeer) onInv(message *network.InvMessage) {
-	if message.Type == "b" {
-		peer.server.blocksInvs <- &invWithPeer{
-			hashes: message.Hashes,
-			peer:   peer,
-		}
-	} else if message.Type == "t" {
-		peer.server.transactionsInvs <- &invWithPeer{
-			hashes: message.Hashes,
-			peer:   peer,
-		}
-	} else {
-		log.WithFields(log.Fields{
-			"peer":    peer,
-			"message": message,
-		}).Error("unknown inv type")
+	peer.server.invs <- &invWithPeer{
+		msg:  message,
+		peer: peer,
 	}
 }
 
@@ -233,20 +209,32 @@ func (peer *ServerPeer) onBlock(message *network.BlockMessage) {
 func (server *Server) broadcastTx(tx *blockchain.Tx, sourcePeer *ServerPeer) {
 	for _, peer := range server.peers {
 		if peer != sourcePeer {
-			peer.Send("inv", &network.InvMessage{
-				Type:   "t",
-				Hashes: []string{tx.Hash},
+			peer.Send(&network.InvMessage{
+				Inventory: []*network.InvVect{&network.InvVect{
+					InvType: network.INV_VECT_TX,
+					Hash:    tx.Hash,
+				}},
 			})
 		}
 	}
 }
 
 func (server *Server) broadcastTxs(txHashes []string, sourcePeer *ServerPeer) {
-	for _, peer := range server.peers {
-		peer.Send("inv", &network.InvMessage{
-			Type:   "t",
-			Hashes: txHashes,
+	var inventory []*network.InvVect
+
+	for _, hash := range txHashes {
+		inventory = append(inventory, &network.InvVect{
+			InvType: network.INV_VECT_TX,
+			Hash:    hash,
 		})
+	}
+
+	invMessage := &network.InvMessage{
+		Inventory: inventory,
+	}
+
+	for _, peer := range server.peers {
+		peer.Send(invMessage)
 	}
 }
 
@@ -259,10 +247,11 @@ func (peer *ServerPeer) onTx(message *network.TxMessage) {
 	}
 }
 
-func (peer *ServerPeer) onGetdata(message *network.GetDataMessage) {
-	if message.Inv.Type == "b" {
-		for _, hash := range message.Inv.Hashes {
-			block, err := peer.server.blockchain.FindBlockByHash(hash)
+func (peer *ServerPeer) onGetData(message *network.GetDataMessage) {
+	for _, invVect := range message.Inventory {
+		switch invVect.InvType {
+		case network.INV_VECT_BLOCK:
+			block, err := peer.server.blockchain.FindBlockByHash(invVect.Hash)
 			if err != nil {
 				log.WithFields(log.Fields{
 					"peer": peer,
@@ -273,21 +262,19 @@ func (peer *ServerPeer) onGetdata(message *network.GetDataMessage) {
 				continue // TODO: send a NotFound message
 			}
 
-			peer.Send("block", &network.BlockMessage{})
+			peer.Send(&network.BlockMessage{})
+		case network.INV_VECT_TX:
+
+		default:
+			log.Error("unknown inv vect type")
 		}
-	} else if message.Inv.Type == "t" {
-		for _, hash := range message.Inv.Hashes {
-			_ = hash
-		}
-	} else {
-		// TODO: Olala
 	}
 }
 
 func (peer *ServerPeer) onGetBlocks(message *network.GetBlocksMessage) {
 	var startAt string
 
-	for _, hash := range message.Hashes {
+	for _, hash := range message.BlockLocator {
 		block, err := peer.server.blockchain.FindBlockByHash(hash)
 		if err != nil {
 			log.WithFields(log.Fields{
@@ -308,9 +295,7 @@ func (peer *ServerPeer) onGetBlocks(message *network.GetBlocksMessage) {
 		startAt = peer.server.blockchain.GenesisBlock.Hash
 	}
 
-	invToSend := &network.InvMessage{
-		Type: "b",
-	}
+	var inventory []*network.InvVect
 
 	hashes, err := peer.server.blockchain.FindBlockHashesStartingAt(startAt)
 	if err != nil {
@@ -319,8 +304,13 @@ func (peer *ServerPeer) onGetBlocks(message *network.GetBlocksMessage) {
 	}
 
 	for _, hash := range hashes {
-		invToSend.Hashes = append(invToSend.Hashes, hash)
+		inventory = append(inventory, &network.InvVect{
+			InvType: network.INV_VECT_BLOCK,
+			Hash:    hash,
+		})
 	}
 
-	peer.Send("inv", invToSend)
+	peer.Send(&network.InvMessage{
+		Inventory: inventory,
+	})
 }

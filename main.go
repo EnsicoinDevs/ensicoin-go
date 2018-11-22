@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"net"
@@ -9,13 +10,22 @@ import (
 	"strings"
 
 	"github.com/EnsicoinDevs/ensicoincoin/blockchain"
+	"github.com/EnsicoinDevs/ensicoincoin/consensus"
 	"github.com/EnsicoinDevs/ensicoincoin/mempool"
 )
+
+var peerPort int
+
+func init() {
+	flag.IntVar(&peerPort, "port", consensus.INGOING_PORT, "The port of the node.")
+}
 
 func main() {
 	log.SetLevel(log.DebugLevel)
 
-	log.Info("ENSICOIN-GO is starting")
+	log.Info("ENSICOINCOIN is starting")
+
+	flag.Parse()
 
 	blockchain := blockchain.NewBlockchain()
 	blockchain.Load()
@@ -28,7 +38,7 @@ func main() {
 
 	go server.Start()
 
-	log.Info("ENSICOIN-GO is now running")
+	log.Info("ENSICOINCOIN is now running")
 
 	for {
 		reader := bufio.NewReader(os.Stdin)

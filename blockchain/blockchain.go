@@ -70,9 +70,9 @@ func (blockchain *Blockchain) Load() error {
 	return nil
 }
 
-func (blockchain *Blockchain) FetchUtxos(tx *Tx) (*Utxos, []*TxOutpoint, error) {
+func (blockchain *Blockchain) FetchUtxos(tx *Tx) (*Utxos, []*Outpoint, error) {
 	utxos := newUtxos()
-	var missings []*TxOutpoint
+	var missings []*Outpoint
 
 	err := blockchain.db.View(func(btx *bolt.Tx) error {
 		b := btx.Bucket([]byte("utxos"))

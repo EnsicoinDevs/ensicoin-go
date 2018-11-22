@@ -4,18 +4,17 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
-	"strconv"
-	"strings"
 	"time"
 )
 
 type BlockHeader struct {
-	Version       int       `json:"version"`
-	Flags         []string  `json:"flags"`
-	HashPrevBlock string    `json:"hashPrevBlock"`
-	HashTxs       string    `json:"hashTransactions"`
-	Timestamp     time.Time `json:"timestamp"`
-	Nonce         int       `json:"nonce"`
+	Version        uint32    `json:"version"`
+	Flags          []string  `json:"flags"`
+	HashPrevBlock  string    `json:"hashPrevBlock"`
+	HashMerkleRoot string    `json:"hashTransactions"`
+	Timestamp      time.Time `json:"timestamp"`
+	Bits           uint32    `json:"bits"`
+	Nonce          uint32    `json:"nonce"`
 }
 
 type Block struct {
@@ -31,12 +30,7 @@ func (block *Block) Validate() bool {
 func (block *Block) ComputeHash() {
 	h := sha256.New()
 
-	h.Write([]byte(strconv.Itoa(block.Header.Version)))
-	h.Write([]byte(strings.Join(block.Header.Flags, "")))
-	h.Write([]byte(block.Header.HashPrevBlock))
-	h.Write([]byte(block.Header.HashTxs))
-	h.Write([]byte(strconv.FormatInt(block.Header.Timestamp.Unix(), 10)))
-	h.Write([]byte(strconv.Itoa(block.Header.Nonce)))
+	// TODO: hash
 	v := h.Sum(nil)
 
 	h.Reset()
@@ -47,19 +41,11 @@ func (block *Block) ComputeHash() {
 }
 
 func (block *Block) ToBlockMessage() *network.BlockMessage {
-	msg := network.BlockMessage{
-		Header: network.BlockHeader{
-			Version:       block.Header.Version,
-			Flags:         block.Header.Flags,
-			HashPrevBlock: block.Header.HashPrevBlock,
-			HashTxs:       block.Header.HashTxs,
-			Timestamp:     block.Header.Timestamp,
-			Nonce:         block.Header.Nonce,
-		},
-	}
+	msg := network.BlockMessage{}
 
 	for _, tx := range block.Txs {
-		msg.Txs = append(msg.Txs, *tx.ToTxMessage())
+		//	msg.Txs = append(msg.Txs, *tx.ToTxMessage())
+		_ = tx
 	}
 
 	return &msg

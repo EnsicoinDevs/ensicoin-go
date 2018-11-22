@@ -5,30 +5,29 @@ import (
 	"encoding/hex"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
 	"strconv"
-	"strings"
 )
 
-type TxOutpoint struct {
-	TxHash string
-	Index  uint
+type Outpoint struct {
+	Hash  string
+	Index uint32
 }
 
-type TxInput struct {
-	PreviousOutput TxOutpoint
-	Script         []string
+type TxIn struct {
+	PreviousOutput Outpoint
+	Script         []byte
 }
 
-type TxOutput struct {
+type TxOut struct {
 	Value  uint64
-	Script []string
+	Script []byte
 }
 
 type Tx struct {
 	Hash    string
-	Version int
+	Version uint32
 	Flags   []string
-	Inputs  []*TxInput
-	Outputs []*TxOutput
+	Inputs  []*TxIn
+	Outputs []*TxOut
 }
 
 func NewTxFromTxMessage(txMsg *network.TxMessage) *Tx {
@@ -38,17 +37,17 @@ func NewTxFromTxMessage(txMsg *network.TxMessage) *Tx {
 	}
 
 	for _, input := range txMsg.Inputs {
-		tx.Inputs = append(tx.Inputs, &TxInput{
-			PreviousOutput: TxOutpoint{
-				TxHash: input.PreviousOutput.TxHash,
-				Index:  input.PreviousOutput.Index,
+		tx.Inputs = append(tx.Inputs, &TxIn{
+			PreviousOutput: Outpoint{
+				Hash:  input.PreviousOutput.Hash,
+				Index: input.PreviousOutput.Index,
 			},
 			Script: input.Script,
 		})
 	}
 
 	for _, output := range txMsg.Outputs {
-		tx.Outputs = append(tx.Outputs, &TxOutput{
+		tx.Outputs = append(tx.Outputs, &TxOut{
 			Value:  output.Value,
 			Script: output.Script,
 		})
@@ -60,17 +59,19 @@ func NewTxFromTxMessage(txMsg *network.TxMessage) *Tx {
 func (tx *Tx) ComputeHash() {
 	h := sha256.New()
 
-	h.Write([]byte(strconv.Itoa(tx.Version)))
-	h.Write([]byte(strings.Join(tx.Flags, "")))
+	// TODO: hash
+
+	//h.Write([]byte(strconv.Itoa(tx.Version)))
+	//h.Write([]byte(strings.Join(tx.Flags, "")))
 
 	for _, input := range tx.Inputs {
-		h.Write([]byte(input.PreviousOutput.TxHash))
+		//h.Write([]byte(input.PreviousOutput.TxHash))
 		h.Write([]byte(strconv.FormatUint(uint64(input.PreviousOutput.Index), 10)))
 	}
 
 	for _, output := range tx.Outputs {
 		h.Write([]byte(strconv.FormatUint(output.Value, 10)))
-		h.Write([]byte(strings.Join(output.Script, "")))
+		h.Write(output.Script)
 	}
 
 	v := h.Sum(nil)
@@ -111,17 +112,17 @@ func (tx *Tx) ToTxMessage() *network.TxMessage {
 	}
 
 	for _, input := range tx.Inputs {
-		msg.Inputs = append(msg.Inputs, network.TxInput{
-			PreviousOutput: network.TxOutpoint{
-				TxHash: input.PreviousOutput.TxHash,
-				Index:  input.PreviousOutput.Index,
+		msg.Inputs = append(msg.Inputs, &network.TxIn{
+			PreviousOutput: &network.Outpoint{
+				Hash:  input.PreviousOutput.Hash,
+				Index: input.PreviousOutput.Index,
 			},
 			Script: input.Script,
 		})
 	}
 
 	for _, output := range tx.Outputs {
-		msg.Outputs = append(msg.Outputs, network.TxOutput{
+		msg.Outputs = append(msg.Outputs, &network.TxOut{
 			Value:  output.Value,
 			Script: output.Script,
 		})

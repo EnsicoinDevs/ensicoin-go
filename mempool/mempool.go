@@ -8,7 +8,7 @@ import (
 )
 
 type Config struct {
-	FetchUtxos func(tx *blockchain.Tx) (*blockchain.Utxos, []*blockchain.TxOutpoint, error)
+	FetchUtxos func(tx *blockchain.Tx) (*blockchain.Utxos, []*blockchain.Outpoint, error)
 }
 
 type Mempool struct {
@@ -16,8 +16,8 @@ type Mempool struct {
 
 	txs              map[string]*blockchain.Tx
 	orphans          map[string]*blockchain.Tx
-	outpoints        map[blockchain.TxOutpoint]*blockchain.Tx
-	orphansOutpoints map[blockchain.TxOutpoint]*blockchain.Tx
+	outpoints        map[blockchain.Outpoint]*blockchain.Tx
+	orphansOutpoints map[blockchain.Outpoint]*blockchain.Tx
 	mutex            sync.RWMutex
 }
 
@@ -27,8 +27,8 @@ func NewMempool(config *Config) *Mempool {
 
 		txs:              make(map[string]*blockchain.Tx),
 		orphans:          make(map[string]*blockchain.Tx),
-		outpoints:        make(map[blockchain.TxOutpoint]*blockchain.Tx),
-		orphansOutpoints: make(map[blockchain.TxOutpoint]*blockchain.Tx),
+		outpoints:        make(map[blockchain.Outpoint]*blockchain.Tx),
+		orphansOutpoints: make(map[blockchain.Outpoint]*blockchain.Tx),
 	}
 }
 
@@ -61,13 +61,13 @@ func (mempool *Mempool) findTxByHash(hash string) *blockchain.Tx {
 	return tx
 }
 
-func (mempool *Mempool) fetchUtxos(tx *blockchain.Tx) (*blockchain.Utxos, []*blockchain.TxOutpoint, error) {
+func (mempool *Mempool) fetchUtxos(tx *blockchain.Tx) (*blockchain.Utxos, []*blockchain.Outpoint, error) {
 	utxos, missings, err := mempool.config.FetchUtxos(tx)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "error fetching utxos")
 	}
 
-	var missingsAfter []*blockchain.TxOutpoint
+	var missingsAfter []*blockchain.Outpoint
 
 	for _, missingOutpoint := range missings {
 		spentTx := mempool.outpoints[*missingOutpoint]
@@ -98,7 +98,7 @@ func (mempool *Mempool) validateTx(tx *blockchain.Tx) (bool, []string) {
 	if len(missings) != 0 {
 		encountered := make(map[string]bool)
 		for _, outpoint := range missings {
-			encountered[outpoint.TxHash] = true
+			encountered[outpoint.Hash] = true
 		}
 
 		var missingParents []string
@@ -115,14 +115,14 @@ func (mempool *Mempool) validateTx(tx *blockchain.Tx) (bool, []string) {
 }
 
 func (mempool *Mempool) processOrphans(tx *blockchain.Tx) []string {
-	outpoint := blockchain.TxOutpoint{
-		TxHash: tx.Hash,
+	outpoint := blockchain.Outpoint{
+		Hash: tx.Hash,
 	}
 
 	var acceptedTxs []string
 
 	for outputId := range tx.Outputs {
-		outpoint.Index = uint(outputId)
+		outpoint.Index = uint32(outputId)
 
 		orphan, exists := mempool.orphansOutpoints[outpoint]
 		if exists {
@@ -200,12 +200,12 @@ func (mempool *Mempool) removeOrphan(tx *blockchain.Tx, recursively bool) {
 	}
 
 	if recursively {
-		outpoint := blockchain.TxOutpoint{
-			TxHash: tx.Hash,
+		outpoint := blockchain.Outpoint{
+			Hash: tx.Hash,
 		}
 
 		for outputId := range tx.Outputs {
-			outpoint.Index = uint(outputId)
+			outpoint.Index = uint32(outputId)
 			orphan, exists := mempool.orphansOutpoints[outpoint]
 			if exists {
 				mempool.removeOrphan(orphan, true)
