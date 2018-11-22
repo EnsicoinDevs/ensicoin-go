@@ -11,6 +11,13 @@ type Script struct {
 	pile []interface{}
 }
 
+func NewScript(inputScript []string, outputScript []string) *Script {
+	return &Script{
+		inputScript:  inputScript,
+		outputScript: outputScript,
+	}
+}
+
 func (script *Script) Execute() bool {
 	fullScript := append(script.outputScript, script.inputScript...)
 

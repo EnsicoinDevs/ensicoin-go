@@ -8,7 +8,7 @@ import (
 )
 
 type Config struct {
-	FetchUtxos func(tx *blockchain.Tx) (*blockchain.Utxos, error)
+	FetchUtxos func(tx *blockchain.Tx) (*blockchain.Utxos, []*blockchain.TxOutpoint, error)
 }
 
 type Mempool struct {
@@ -61,13 +61,24 @@ func (mempool *Mempool) findTxByHash(hash string) *blockchain.Tx {
 	return tx
 }
 
-func (mempool *Mempool) fetchUtxos(tx *blockchain.Tx) (*blockchain.Utxos, error) {
-	utxos, err := mempool.config.FetchUtxos(tx)
+func (mempool *Mempool) fetchUtxos(tx *blockchain.Tx) (*blockchain.Utxos, []*blockchain.TxOutpoint, error) {
+	utxos, missings, err := mempool.config.FetchUtxos(tx)
 	if err != nil {
-		return nil, errors.Wrap(err, "error fetching utxos")
+		return nil, nil, errors.Wrap(err, "error fetching utxos")
 	}
 
-	return utxos, nil
+	var missingsAfter []*blockchain.TxOutpoint
+
+	for _, missingOutpoint := range missings {
+		spentTx := mempool.outpoints[*missingOutpoint]
+		if spentTx == nil {
+			missingsAfter = append(missingsAfter, missingOutpoint)
+		} else {
+			utxos.AddEntryWithTx(*missingOutpoint, spentTx, -1)
+		}
+	}
+
+	return utxos, missingsAfter, nil
 }
 
 func (mempool *Mempool) validateTx(tx *blockchain.Tx) (bool, []string) {
@@ -83,17 +94,32 @@ func (mempool *Mempool) validateTx(tx *blockchain.Tx) (bool, []string) {
 		return false, nil
 	}
 
-	utxos, _ := mempool.fetchUtxos(tx)
+	utxos, missings, _ := mempool.fetchUtxos(tx)
+	if len(missings) != 0 {
+		encountered := make(map[string]bool)
+		for _, outpoint := range missings {
+			encountered[outpoint.TxHash] = true
+		}
+
+		var missingParents []string
+		for txHash, _ := range encountered {
+			missingParents = append(missingParents, txHash)
+		}
+
+		return true, missingParents
+	}
 
 	_ = utxos
 
 	return true, nil
 }
 
-func (mempool *Mempool) processOrphans(tx *blockchain.Tx) {
+func (mempool *Mempool) processOrphans(tx *blockchain.Tx) []string {
 	outpoint := blockchain.TxOutpoint{
 		TxHash: tx.Hash,
 	}
+
+	var acceptedTxs []string
 
 	for outputId := range tx.Outputs {
 		outpoint.Index = uint(outputId)
@@ -110,11 +136,14 @@ func (mempool *Mempool) processOrphans(tx *blockchain.Tx) {
 				continue
 			}
 
+			acceptedTxs = append(acceptedTxs, orphan.Hash)
 			mempool.addTx(orphan)
 			mempool.removeOrphan(orphan, false)
-			mempool.processOrphans(orphan)
+			acceptedTxs = append(acceptedTxs, mempool.processOrphans(orphan)...)
 		}
 	}
+
+	return acceptedTxs
 }
 
 func (mempool *Mempool) ProcessOrphans(tx *blockchain.Tx) {
@@ -125,25 +154,28 @@ func (mempool *Mempool) ProcessOrphans(tx *blockchain.Tx) {
 	mempool.mutex.Unlock()
 }
 
-func (mempool *Mempool) processTx(tx *blockchain.Tx) bool {
+func (mempool *Mempool) processTx(tx *blockchain.Tx) []string {
 	valid, missingParents := mempool.validateTx(tx)
 
 	if !valid {
-		return false
+		return nil
 	}
 
-	mempool.addTx(tx)
-
 	if len(missingParents) == 0 {
-		mempool.processOrphans(tx)
+		var acceptedTxs []string
+
+		acceptedTxs = append(acceptedTxs, tx.Hash)
+		mempool.addTx(tx)
+		acceptedTxs = append(acceptedTxs, mempool.processOrphans(tx)...)
+
+		return acceptedTxs
 	}
 
 	mempool.addOrphan(tx)
-
-	return true
+	return nil
 }
 
-func (mempool *Mempool) ProcessTx(tx *blockchain.Tx) bool {
+func (mempool *Mempool) ProcessTx(tx *blockchain.Tx) []string {
 	mempool.mutex.Lock()
 	defer mempool.mutex.Unlock()
 

@@ -58,24 +58,28 @@ type NotFoundMessage struct {
 	Hash string `json:"hash"`
 }
 
+type BlockHeader struct {
+	Version       int       `json:"version"`
+	Flags         []string  `json:"flags"`
+	HashPrevBlock string    `json:"hashPrevBlock"`
+	HashTxs       string    `json:"hashTransactions"`
+	Timestamp     time.Time `json:"timestamp"`
+	Nonce         int       `json:"nonce"`
+}
+
 type BlockMessage struct {
-	Header struct {
-		Version         int       `json:"version"`
-		Flags           []string  `json:"flags"`
-		HashPrevBlock   string    `json:"hashPrevBlock"`
-		HashTransaction string    `json:"hashTransactions"`
-		Timestamp       time.Time `json:"timestamp"`
-		Nonce           int       `json:"nonce"`
-	} `json:"header"`
-	Txs []TxMessage `json:"transactions"`
+	Header BlockHeader `json:"header"`
+	Txs    []TxMessage `json:"transactions"`
+}
+
+type TxOutpoint struct {
+	TxHash string `json:"transactionHash"`
+	Index  uint   `json:"index"`
 }
 
 type TxInput struct {
-	PreviousOutput struct {
-		TxHash string `json:"transactionHash"`
-		Index  uint   `json:"index"`
-	} `json:"previousOutput"`
-	Script []string `json:"script"`
+	PreviousOutput TxOutpoint `json:"previousOutput"`
+	Script         []string   `json:"script"`
 }
 
 type TxOutput struct {

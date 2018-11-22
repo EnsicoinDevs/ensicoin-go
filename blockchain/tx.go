@@ -103,3 +103,29 @@ func (tx *Tx) IsSane() bool {
 func (tx *Tx) IsCoinBase() bool {
 	return len(tx.Inputs) == 0
 }
+
+func (tx *Tx) ToTxMessage() *network.TxMessage {
+	msg := network.TxMessage{
+		Version: tx.Version,
+		Flags:   tx.Flags,
+	}
+
+	for _, input := range tx.Inputs {
+		msg.Inputs = append(msg.Inputs, network.TxInput{
+			PreviousOutput: network.TxOutpoint{
+				TxHash: input.PreviousOutput.TxHash,
+				Index:  input.PreviousOutput.Index,
+			},
+			Script: input.Script,
+		})
+	}
+
+	for _, output := range tx.Outputs {
+		msg.Outputs = append(msg.Outputs, network.TxOutput{
+			Value:  output.Value,
+			Script: output.Script,
+		})
+	}
+
+	return &msg
+}

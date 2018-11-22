@@ -78,6 +78,17 @@ func (utxos *Utxos) AddEntry(outpoint TxOutpoint, entry *UtxoEntry) {
 	utxos.entries[outpoint] = entry
 }
 
+func (utxos *Utxos) AddEntryWithTx(outpoint TxOutpoint, tx *Tx, blockHeight int) {
+	output := tx.Outputs[outpoint.Index]
+
+	utxos.AddEntry(outpoint, &UtxoEntry{
+		amount:      output.Value,
+		script:      output.Script,
+		blockHeight: blockHeight,
+		coinBase:    tx.IsCoinBase(),
+	})
+}
+
 func (utxos *Utxos) FindEntry(outpoint TxOutpoint) *UtxoEntry {
 	return utxos.entries[outpoint]
 }

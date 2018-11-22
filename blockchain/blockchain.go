@@ -70,8 +70,9 @@ func (blockchain *Blockchain) Load() error {
 	return nil
 }
 
-func (blockchain *Blockchain) FetchUtxos(tx *Tx) (*Utxos, error) {
+func (blockchain *Blockchain) FetchUtxos(tx *Tx) (*Utxos, []*TxOutpoint, error) {
 	utxos := newUtxos()
+	var missings []*TxOutpoint
 
 	err := blockchain.db.View(func(btx *bolt.Tx) error {
 		b := btx.Bucket([]byte("utxos"))
@@ -84,6 +85,11 @@ func (blockchain *Blockchain) FetchUtxos(tx *Tx) (*Utxos, error) {
 			}
 
 			utxoBytes := b.Get(outpointBytes)
+			if utxoBytes == nil {
+				missings = append(missings, &outpoint)
+				continue
+			}
+
 			var utxo *UtxoEntry
 			if err = json.Unmarshal(utxoBytes, &utxo); err != nil {
 				return errors.Wrap(err, "error unmarshaling an utxo entry")
@@ -95,7 +101,7 @@ func (blockchain *Blockchain) FetchUtxos(tx *Tx) (*Utxos, error) {
 		return nil
 	})
 
-	return utxos, err
+	return utxos, missings, err
 }
 
 func (blockchain *Blockchain) StoreBlock(block *Block) error {

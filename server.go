@@ -241,13 +241,46 @@ func (server *Server) broadcastTx(tx *blockchain.Tx, sourcePeer *ServerPeer) {
 	}
 }
 
+func (server *Server) broadcastTxs(txHashes []string, sourcePeer *ServerPeer) {
+	for _, peer := range server.peers {
+		peer.Send("inv", &network.InvMessage{
+			Type:   "t",
+			Hashes: txHashes,
+		})
+	}
+}
+
 func (peer *ServerPeer) onTx(message *network.TxMessage) {
 	tx := blockchain.NewTxFromTxMessage(message)
 	tx.ComputeHash()
-	valid := peer.server.mempool.ProcessTx(tx)
+	acceptedTxs := peer.server.mempool.ProcessTx(tx)
+	if len(acceptedTxs) > 0 {
+		peer.server.broadcastTxs(acceptedTxs, peer)
+	}
+}
 
-	if valid {
-		peer.server.broadcastTx(tx, peer)
+func (peer *ServerPeer) onGetdata(message *network.GetDataMessage) {
+	if message.Inv.Type == "b" {
+		for _, hash := range message.Inv.Hashes {
+			block, err := peer.server.blockchain.FindBlockByHash(hash)
+			if err != nil {
+				log.WithFields(log.Fields{
+					"peer": peer,
+				}).WithError(err).Error("error finding a block by hash")
+			}
+
+			if block == nil {
+				continue // TODO: send a NotFound message
+			}
+
+			peer.Send("block", &network.BlockMessage{})
+		}
+	} else if message.Inv.Type == "t" {
+		for _, hash := range message.Inv.Hashes {
+			_ = hash
+		}
+	} else {
+		// TODO: Olala
 	}
 }
 
