@@ -153,6 +153,24 @@ func WriteVarUint(writer io.Writer, value uint64) error {
 	return WriteUint64(writer, value)
 }
 
+func ReadVarString(reader io.Reader) (string, error) {
+	length, err := ReadVarUint(reader)
+	if err != nil {
+		return "", err
+	}
+
+	return ReadString(reader, length)
+}
+
+func WriteVarString(writer io.Writer, value string) error {
+	err := WriteVarUint(writer, uint64(len(value)))
+	if err != nil {
+		return err
+	}
+
+	return WriteString(writer, value)
+}
+
 func ReadString(reader io.Reader, size uint64) (string, error) {
 	buf := make([]byte, size)
 
@@ -164,5 +182,7 @@ func ReadString(reader io.Reader, size uint64) (string, error) {
 }
 
 func WriteString(writer io.Writer, value string) error {
-	return nil
+	_, err := io.WriteString(writer, value)
+
+	return err
 }
