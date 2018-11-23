@@ -7,80 +7,12 @@ import (
 	"strconv"
 )
 
-type Outpoint struct {
-	Hash  string
-	Index uint32
-}
-
-type TxIn struct {
-	PreviousOutput Outpoint
-	Script         []byte
-}
-
-type TxOut struct {
-	Value  uint64
-	Script []byte
-}
-
 type Tx struct {
-	Hash    string
-	Version uint32
-	Flags   []string
-	Inputs  []*TxIn
-	Outputs []*TxOut
+	Msg *network.TxMessage
 }
 
-func NewTxFromTxMessage(txMsg *network.TxMessage) *Tx {
-	tx := Tx{
-		Version: txMsg.Version,
-		Flags:   txMsg.Flags,
-	}
-
-	for _, input := range txMsg.Inputs {
-		tx.Inputs = append(tx.Inputs, &TxIn{
-			PreviousOutput: Outpoint{
-				Hash:  input.PreviousOutput.Hash,
-				Index: input.PreviousOutput.Index,
-			},
-			Script: input.Script,
-		})
-	}
-
-	for _, output := range txMsg.Outputs {
-		tx.Outputs = append(tx.Outputs, &TxOut{
-			Value:  output.Value,
-			Script: output.Script,
-		})
-	}
-
-	return &tx
-}
-
-func (tx *Tx) ComputeHash() {
-	h := sha256.New()
-
-	// TODO: hash
-
-	//h.Write([]byte(strconv.Itoa(tx.Version)))
-	//h.Write([]byte(strings.Join(tx.Flags, "")))
-
-	for _, input := range tx.Inputs {
-		//h.Write([]byte(input.PreviousOutput.TxHash))
-		h.Write([]byte(strconv.FormatUint(uint64(input.PreviousOutput.Index), 10)))
-	}
-
-	for _, output := range tx.Outputs {
-		h.Write([]byte(strconv.FormatUint(output.Value, 10)))
-		h.Write(output.Script)
-	}
-
-	v := h.Sum(nil)
-
-	h.Reset()
-
-	h.Write(v)
-
-	tx.Hash = hex.EncodeToString(h.Sum(nil))
+func (tx *Tx) Hash() []byte {
+	return tx.Msg.Hash()
 }
 
 // Validate applies the validation tests of a transaction and returns true if they pass, false if they fail.

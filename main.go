@@ -14,10 +14,14 @@ import (
 	"github.com/EnsicoinDevs/ensicoincoin/mempool"
 )
 
-var peerPort int
+var (
+	peerPort     int
+	discordToken string
+)
 
 func init() {
 	flag.IntVar(&peerPort, "port", consensus.INGOING_PORT, "The port of the node.")
+	flag.StringVar(&discordToken, "token", "", "A discord token.")
 }
 
 func main() {
@@ -37,6 +41,10 @@ func main() {
 	server := NewServer(blockchain, mempool)
 
 	go server.Start()
+
+	if discordToken != "" {
+		startDiscordBootstraping(server)
+	}
 
 	log.Info("ENSICOINCOIN is now running")
 
