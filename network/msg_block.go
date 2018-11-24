@@ -15,6 +15,7 @@ type BlockHeader struct {
 	HashPrevBlock  *utils.Hash
 	HashMerkleRoot *utils.Hash
 	Timestamp      time.Time
+	Height         uint32
 	Bits           uint32
 	Nonce          uint32
 }
@@ -56,6 +57,11 @@ func readBlockHeader(reader io.Reader) (*BlockHeader, error) {
 		return nil, err
 	}
 
+	height, err := ReadUint32(reader)
+	if err != nil {
+		return nil, err
+	}
+
 	bits, err := ReadUint32(reader)
 	if err != nil {
 		return nil, err
@@ -72,6 +78,7 @@ func readBlockHeader(reader io.Reader) (*BlockHeader, error) {
 		HashPrevBlock:  hashPrevBlock,
 		HashMerkleRoot: hashMerkleRoot,
 		Timestamp:      time.Unix(int64(timestamp), 0),
+		Height:         height,
 		Bits:           bits,
 		Nonce:          nonce,
 	}, nil
@@ -106,6 +113,11 @@ func writeBlockHeader(writer io.Writer, header *BlockHeader) error {
 	}
 
 	err = WriteUint64(writer, uint64(header.Timestamp.Unix()))
+	if err != nil {
+		return err
+	}
+
+	err = WriteUint32(writer, header.Height)
 	if err != nil {
 		return err
 	}
