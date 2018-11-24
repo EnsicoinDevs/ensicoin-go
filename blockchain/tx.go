@@ -25,12 +25,19 @@ func (tx *Tx) IsSane() bool {
 		return false
 	}
 
-	// TODO: check for the maximum allowed size
-
 	for _, output := range tx.Msg.Outputs {
 		if output.Value < 0 {
 			return false
 		}
+	}
+
+	seenInputs := make(map[*network.Outpoint]struct{})
+	for _, input := range tx.Msg.Inputs {
+		if _, exists := seenInputs[input.PreviousOutput]; exists {
+			return false
+		}
+
+		seenInputs[input.PreviousOutput] = struct{}{}
 	}
 
 	return true
