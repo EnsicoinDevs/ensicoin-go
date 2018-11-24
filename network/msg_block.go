@@ -148,10 +148,50 @@ func NewBlockMessage() *BlockMessage {
 }
 
 func (msg *BlockMessage) Decode(reader io.Reader) error {
+	header, err := readBlockHeader(reader)
+	if err != nil {
+		return err
+	}
+
+	msg.Header = header
+
+	count, err := ReadVarUint(reader)
+	if err != nil {
+		return err
+	}
+
+	for i := uint64(0); i < count; i++ {
+		tx := NewTxMessage()
+
+		err = tx.Decode(reader)
+		if err != nil {
+			return err
+		}
+
+		msg.Txs = append(msg.Txs, tx)
+	}
+
 	return nil
 }
 
 func (msg *BlockMessage) Encode(writer io.Writer) error {
+	err := writeBlockHeader(writer, msg.Header)
+	if err != nil {
+		return err
+	}
+
+	err = WriteVarUint(writer, uint64(len(msg.Txs)))
+	if err != nil {
+		return err
+	}
+
+	for _, tx := range msg.Txs {
+		err = tx.Encode(writer)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
