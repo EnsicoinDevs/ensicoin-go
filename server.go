@@ -6,6 +6,7 @@ import (
 	"github.com/EnsicoinDevs/ensicoincoin/mempool"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
 	"github.com/EnsicoinDevs/ensicoincoin/peer"
+	"github.com/EnsicoinDevs/ensicoincoin/utils"
 	log "github.com/sirupsen/logrus"
 	"net"
 )
@@ -212,14 +213,14 @@ func (server *Server) broadcastTx(tx *blockchain.Tx, sourcePeer *ServerPeer) {
 			peer.Send(&network.InvMessage{
 				Inventory: []*network.InvVect{&network.InvVect{
 					InvType: network.INV_VECT_TX,
-					Hash:    tx.Hash,
+					Hash:    tx.Hash(),
 				}},
 			})
 		}
 	}
 }
 
-func (server *Server) broadcastTxs(txHashes []string, sourcePeer *ServerPeer) {
+func (server *Server) broadcastTxs(txHashes []*utils.Hash, sourcePeer *ServerPeer) {
 	var inventory []*network.InvVect
 
 	for _, hash := range txHashes {
@@ -240,7 +241,6 @@ func (server *Server) broadcastTxs(txHashes []string, sourcePeer *ServerPeer) {
 
 func (peer *ServerPeer) onTx(message *network.TxMessage) {
 	tx := blockchain.NewTxFromTxMessage(message)
-	tx.ComputeHash()
 	acceptedTxs := peer.server.mempool.ProcessTx(tx)
 	if len(acceptedTxs) > 0 {
 		peer.server.broadcastTxs(acceptedTxs, peer)
@@ -272,7 +272,7 @@ func (peer *ServerPeer) onGetData(message *network.GetDataMessage) {
 }
 
 func (peer *ServerPeer) onGetBlocks(message *network.GetBlocksMessage) {
-	var startAt string
+	var startAt *utils.Hash
 
 	for _, hash := range message.BlockLocator {
 		block, err := peer.server.blockchain.FindBlockByHash(hash)
@@ -287,12 +287,12 @@ func (peer *ServerPeer) onGetBlocks(message *network.GetBlocksMessage) {
 			continue
 		}
 
-		startAt = block.Hash
+		startAt = block.Hash()
 		break
 	}
 
-	if startAt == "" {
-		startAt = peer.server.blockchain.GenesisBlock.Hash
+	if startAt == nil {
+		startAt = peer.server.blockchain.GenesisBlock.Hash()
 	}
 
 	var inventory []*network.InvVect

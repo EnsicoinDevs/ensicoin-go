@@ -2,6 +2,7 @@ package blockchain
 
 import (
 	"encoding/json"
+	"github.com/EnsicoinDevs/ensicoincoin/network"
 )
 
 type UtxoEntry struct {
@@ -65,21 +66,21 @@ func (entry *UtxoEntry) IsCoinBase() bool {
 }
 
 type Utxos struct {
-	entries map[Outpoint]*UtxoEntry
+	entries map[*network.Outpoint]*UtxoEntry
 }
 
 func newUtxos() *Utxos {
 	return &Utxos{
-		entries: make(map[Outpoint]*UtxoEntry),
+		entries: make(map[*network.Outpoint]*UtxoEntry),
 	}
 }
 
-func (utxos *Utxos) AddEntry(outpoint Outpoint, entry *UtxoEntry) {
+func (utxos *Utxos) AddEntry(outpoint *network.Outpoint, entry *UtxoEntry) {
 	utxos.entries[outpoint] = entry
 }
 
-func (utxos *Utxos) AddEntryWithTx(outpoint Outpoint, tx *Tx, blockHeight int) {
-	output := tx.Outputs[outpoint.Index]
+func (utxos *Utxos) AddEntryWithTx(outpoint *network.Outpoint, tx *Tx, blockHeight int) {
+	output := tx.Msg.Outputs[outpoint.Index]
 
 	utxos.AddEntry(outpoint, &UtxoEntry{
 		amount:      output.Value,
@@ -89,6 +90,6 @@ func (utxos *Utxos) AddEntryWithTx(outpoint Outpoint, tx *Tx, blockHeight int) {
 	})
 }
 
-func (utxos *Utxos) FindEntry(outpoint Outpoint) *UtxoEntry {
+func (utxos *Utxos) FindEntry(outpoint *network.Outpoint) *UtxoEntry {
 	return utxos.entries[outpoint]
 }

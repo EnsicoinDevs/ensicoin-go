@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/EnsicoinDevs/ensicoincoin/utils"
 	"io"
 	"time"
 )
@@ -11,8 +12,8 @@ import (
 type BlockHeader struct {
 	Version        uint32
 	Flags          []string
-	HashPrevBlock  string
-	HashMerkleRoot string
+	HashPrevBlock  *utils.Hash
+	HashMerkleRoot *utils.Hash
 	Timestamp      time.Time
 	Bits           uint32
 	Nonce          uint32
@@ -40,12 +41,12 @@ func readBlockHeader(reader io.Reader) (*BlockHeader, error) {
 		flags = append(flags, flag)
 	}
 
-	hashPrevBlock, err := ReadString(reader, 32)
+	hashPrevBlock, err := ReadHash(reader)
 	if err != nil {
 		return nil, err
 	}
 
-	hashMerkleRoot, err := ReadString(reader, 32)
+	hashMerkleRoot, err := ReadHash(reader)
 	if err != nil {
 		return nil, err
 	}
@@ -94,12 +95,12 @@ func writeBlockHeader(writer io.Writer, header *BlockHeader) error {
 		}
 	}
 
-	err = WriteString(writer, header.HashPrevBlock)
+	err = WriteHash(writer, header.HashPrevBlock)
 	if err != nil {
 		return err
 	}
 
-	err = WriteString(writer, header.HashMerkleRoot)
+	err = WriteHash(writer, header.HashMerkleRoot)
 	if err != nil {
 		return err
 	}
@@ -122,15 +123,15 @@ func writeBlockHeader(writer io.Writer, header *BlockHeader) error {
 	return nil
 }
 
-func (header *BlockHeader) Hash() []byte {
+func (header *BlockHeader) Hash() *utils.Hash {
 	buf := bytes.NewBuffer(make([]byte, 0, 232))
 	_ = writeBlockHeader(buf, header)
 
-	hash := sha256.Sum256(buf.Bytes())
+	hash := utils.Hash(sha256.Sum256(buf.Bytes()))
 
 	hash = sha256.Sum256(hash[:])
 
-	return hash[:]
+	return &hash
 }
 
 func (header *BlockHeader) HashString() string {
@@ -138,7 +139,8 @@ func (header *BlockHeader) HashString() string {
 }
 
 type BlockMessage struct {
-	Txs []*TxMessage
+	Header *BlockHeader
+	Txs    []*TxMessage
 }
 
 func NewBlockMessage() *BlockMessage {

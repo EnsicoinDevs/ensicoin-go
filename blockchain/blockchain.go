@@ -2,6 +2,8 @@ package blockchain
 
 import (
 	"encoding/json"
+	"github.com/EnsicoinDevs/ensicoincoin/network"
+	"github.com/EnsicoinDevs/ensicoincoin/utils"
 	bolt "github.com/etcd-io/bbolt"
 	"github.com/pkg/errors"
 )
@@ -25,8 +27,6 @@ func (blockchain *Blockchain) Load() error {
 		return errors.Wrap(err, "error opening the blockchain database")
 	}
 
-	genesisBlock.ComputeHash()
-
 	shouldStoreGenesisBlock := false
 
 	blockchain.db.Update(func(tx *bolt.Tx) error {
@@ -35,7 +35,7 @@ func (blockchain *Blockchain) Load() error {
 			return errors.Wrap(err, "error creating the blocks bucket")
 		}
 
-		genesisBlockInDb := b.Get([]byte(genesisBlock.Hash))
+		genesisBlockInDb := b.Get(genesisBlock.Hash()[:])
 		if genesisBlockInDb == nil {
 			shouldStoreGenesisBlock = true
 		}
@@ -47,7 +47,7 @@ func (blockchain *Blockchain) Load() error {
 
 		longestChainInDb := b.Get([]byte("longestChain"))
 		if longestChainInDb == nil {
-			b.Put([]byte("longestChain"), []byte(genesisBlock.Hash))
+			b.Put([]byte("longestChain"), genesisBlock.Hash()[:])
 		}
 
 		_, err = tx.CreateBucketIfNotExists([]byte("following"))
@@ -70,14 +70,14 @@ func (blockchain *Blockchain) Load() error {
 	return nil
 }
 
-func (blockchain *Blockchain) FetchUtxos(tx *Tx) (*Utxos, []*Outpoint, error) {
+func (blockchain *Blockchain) FetchUtxos(tx *Tx) (*Utxos, []*network.Outpoint, error) {
 	utxos := newUtxos()
-	var missings []*Outpoint
+	var missings []*network.Outpoint
 
 	err := blockchain.db.View(func(btx *bolt.Tx) error {
 		b := btx.Bucket([]byte("utxos"))
 
-		for _, input := range tx.Inputs {
+		for _, input := range tx.Msg.Inputs {
 			outpoint := input.PreviousOutput
 			outpointBytes, err := json.Marshal(outpoint)
 			if err != nil {
@@ -86,7 +86,7 @@ func (blockchain *Blockchain) FetchUtxos(tx *Tx) (*Utxos, []*Outpoint, error) {
 
 			utxoBytes := b.Get(outpointBytes)
 			if utxoBytes == nil {
-				missings = append(missings, &outpoint)
+				missings = append(missings, outpoint)
 				continue
 			}
 
@@ -105,10 +105,6 @@ func (blockchain *Blockchain) FetchUtxos(tx *Tx) (*Utxos, []*Outpoint, error) {
 }
 
 func (blockchain *Blockchain) StoreBlock(block *Block) error {
-	if block.Hash == "" {
-		block.ComputeHash()
-	}
-
 	err := blockchain.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("blocks"))
 
@@ -117,7 +113,7 @@ func (blockchain *Blockchain) StoreBlock(block *Block) error {
 			return errors.Wrap(err, "error marshaling the block")
 		}
 
-		b.Put([]byte(block.Hash), blockBytes)
+		b.Put(block.Hash()[:], blockBytes)
 
 		return nil
 	})
@@ -125,13 +121,13 @@ func (blockchain *Blockchain) StoreBlock(block *Block) error {
 	return err
 }
 
-func (blockchain *Blockchain) FindBlockByHash(hash string) (*Block, error) {
+func (blockchain *Blockchain) FindBlockByHash(hash *utils.Hash) (*Block, error) {
 	var block *Block
 
 	err := blockchain.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("blocks"))
 
-		blockBytes := b.Get([]byte(hash))
+		blockBytes := b.Get(hash[:])
 		if blockBytes == nil {
 			return nil
 		}
@@ -150,11 +146,11 @@ func (blockchain *Blockchain) FindBlockByHash(hash string) (*Block, error) {
 }
 
 func (blockchain *Blockchain) FindLongestChain() (*Block, error) {
-	var longestChainHash string
+	var longestChainHash *utils.Hash
 
 	err := blockchain.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("stats"))
-		longestChainHash = string(b.Get([]byte("longestChain")))
+		longestChainHash = utils.NewHash(b.Get([]byte("longestChain")))
 
 		return nil
 	})
@@ -170,20 +166,21 @@ func (blockchain *Blockchain) FindLongestChain() (*Block, error) {
 	return block, nil
 }
 
-func (blockchain *Blockchain) FindBlockHashesStartingAt(hash string) ([]string, error) {
-	var hashes []string
+func (blockchain *Blockchain) FindBlockHashesStartingAt(hash *utils.Hash) ([]*utils.Hash, error) {
+	var hashes []*utils.Hash
 
 	err := blockchain.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("following"))
 
 		c := b.Cursor()
 
-		current := []byte(hash)
+		current := hash
 
-		for k, v := c.Seek([]byte(hash)); k != nil; k, v = c.Seek(current) {
-			hashes = append(hashes, string(v))
+		for k, v := c.Seek(hash[:]); k != nil; k, v = c.Seek(current[:]) {
+			hash := utils.NewHash(v)
+			hashes = append(hashes, hash)
 
-			current = v
+			current = hash
 		}
 
 		return nil

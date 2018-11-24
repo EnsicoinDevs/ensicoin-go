@@ -2,6 +2,7 @@ package network
 
 import (
 	"encoding/binary"
+	"github.com/EnsicoinDevs/ensicoincoin/utils"
 	"io"
 	"math"
 )
@@ -183,6 +184,21 @@ func ReadString(reader io.Reader, size uint64) (string, error) {
 
 func WriteString(writer io.Writer, value string) error {
 	_, err := io.WriteString(writer, value)
+
+	return err
+}
+
+func ReadHash(reader io.Reader) (*utils.Hash, error) {
+	var hash *utils.Hash
+	if _, err := io.ReadFull(reader, hash[:]); err != nil {
+		return nil, err
+	}
+
+	return hash, nil
+}
+
+func WriteHash(writer io.Writer, hash *utils.Hash) error {
+	_, err := writer.Write(hash[:])
 
 	return err
 }

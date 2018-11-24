@@ -3,17 +3,17 @@ package network
 import (
 	"bytes"
 	"crypto/sha256"
+	"github.com/EnsicoinDevs/ensicoincoin/utils"
 	"io"
 )
 
 type Outpoint struct {
-	Hash  []byte
+	Hash  *utils.Hash
 	Index uint32
 }
 
 func readOutpoint(reader io.Reader) (*Outpoint, error) {
-	buf := make([]byte, 32)
-	_, err := io.ReadFull(reader, buf)
+	hash, err := ReadHash(reader)
 	if err != nil {
 		return nil, err
 	}
@@ -24,13 +24,13 @@ func readOutpoint(reader io.Reader) (*Outpoint, error) {
 	}
 
 	return &Outpoint{
-		Hash:  buf,
+		Hash:  hash,
 		Index: index,
 	}, nil
 }
 
 func writeOutpoint(writer io.Writer, outpoint *Outpoint) error {
-	_, err := writer.Write(outpoint.Hash)
+	err := WriteHash(writer, outpoint.Hash)
 	if err != nil {
 		return err
 	}
@@ -243,15 +243,15 @@ func (msg *TxMessage) Encode(writer io.Writer) error {
 	return nil
 }
 
-func (msg *TxMessage) Hash() []byte {
+func (msg *TxMessage) Hash() *utils.Hash {
 	buf := bytes.NewBuffer(make([]byte, 0, 7))
 	_ = msg.Encode(buf)
 
-	hash := sha256.Sum256(buf.Bytes())
+	hash := utils.Hash(sha256.Sum256(buf.Bytes()))
 
 	hash = sha256.Sum256(hash[:])
 
-	return hash[:]
+	return &hash
 }
 
 func (msg *TxMessage) MsgType() string {

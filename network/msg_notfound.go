@@ -31,6 +31,18 @@ func (msg *NotFoundMessage) Decode(reader io.Reader) error {
 }
 
 func (msg *NotFoundMessage) Encode(writer io.Writer) error {
+	err := WriteVarUint(writer, uint64(len(msg.Inventory)))
+	if err != nil {
+		return err
+	}
+
+	for _, invVect := range msg.Inventory {
+		err = writeInvVect(writer, invVect)
+		if err != nil {
+			return nil
+		}
+	}
+
 	return nil
 }
 

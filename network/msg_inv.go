@@ -1,6 +1,7 @@
 package network
 
 import (
+	"github.com/EnsicoinDevs/ensicoincoin/utils"
 	"io"
 )
 
@@ -13,7 +14,7 @@ const (
 
 type InvVect struct {
 	InvType InvVectType
-	Hash    string
+	Hash    *utils.Hash
 }
 
 func readInvVect(reader io.Reader) (*InvVect, error) {
@@ -22,7 +23,7 @@ func readInvVect(reader io.Reader) (*InvVect, error) {
 		return nil, err
 	}
 
-	hash, err := ReadString(reader, 32)
+	hash, err := ReadHash(reader)
 	if err != nil {
 		return nil, err
 	}
@@ -31,6 +32,15 @@ func readInvVect(reader io.Reader) (*InvVect, error) {
 		InvType: InvVectType(invType),
 		Hash:    hash,
 	}, nil
+}
+
+func writeInvVect(writer io.Writer, invVect *InvVect) error {
+	err := WriteUint32(writer, uint32(invVect.InvType))
+	if err != nil {
+		return err
+	}
+
+	return WriteHash(writer, invVect.Hash)
 }
 
 type InvMessage struct {
@@ -60,6 +70,18 @@ func (msg *InvMessage) Decode(reader io.Reader) error {
 }
 
 func (msg *InvMessage) Encode(writer io.Writer) error {
+	err := WriteVarUint(writer, uint64(len(msg.Inventory)))
+	if err != nil {
+		return err
+	}
+
+	for _, invVect := range msg.Inventory {
+		err = writeInvVect(writer, invVect)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
