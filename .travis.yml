@@ -1,4 +1,9 @@
 language: go
 
 go:
- - master
+- '1.0'
+- '1.3'
+
+before_install:
+- openssl aes-256-cbc -K $encrypted_a0d7979d78c8_key -iv $encrypted_a0d7979d78c8_iv
+  -in ./.travis/id_rsa.enc -out ./.travis/id_rsa -d
