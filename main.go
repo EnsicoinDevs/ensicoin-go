@@ -15,13 +15,15 @@ import (
 )
 
 var (
-	peerPort     int
-	discordToken string
+	peerPort        int
+	discordToken    string
+	interactiveMode bool
 )
 
 func init() {
 	flag.IntVar(&peerPort, "port", consensus.INGOING_PORT, "The port of the node.")
 	flag.StringVar(&discordToken, "token", "", "A discord token.")
+	flag.BoolVar(&interactiveMode, "i", false, "Interactive mode.")
 }
 
 func main() {
@@ -47,6 +49,11 @@ func main() {
 	}
 
 	log.Info("ENSICOINCOIN is now running")
+
+	if !interactiveMode {
+		ch := make(chan bool)
+		<-ch
+	}
 
 	for {
 		reader := bufio.NewReader(os.Stdin)
