@@ -9,5 +9,5 @@ before_install:
 
 install: true
 
-after_install:
+after_success:
 - sh .travis/deploy.sh
