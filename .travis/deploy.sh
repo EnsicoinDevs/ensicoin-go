@@ -8,8 +8,9 @@ git config --global push.default matching
 git remote add deploy ssh://$GITUSER@$IP:$PORT$DEPLOY_DIR
 git push deploy master
 
-ssh $GITUSER@$IP -p $PORT <<EOF
+ssh -tt $GITUSER@$IP -p $PORT <<EOF
 	cd $DEPLOY_DIR
 	go install
 	sudo systemctl restart ensicoincoin.service
+	exit
 EOF
