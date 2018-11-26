@@ -3,6 +3,9 @@ language: go
 go:
 - master
 
+addons:
+  ssh_known_hosts: $IP
+
 before_install:
 - openssl aes-256-cbc -K $encrypted_c574e37cc2d7_key -iv $encrypted_c574e37cc2d7_iv
   -in .travis/id_rsa.enc -out .travis/id_rsa -d
