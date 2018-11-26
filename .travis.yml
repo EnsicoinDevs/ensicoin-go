@@ -4,7 +4,7 @@ go:
 - master
 
 addons:
-  ssh_known_hosts: $IP
+  ssh_known_hosts: 78.248.188.120
 
 before_install:
 - openssl aes-256-cbc -K $encrypted_c574e37cc2d7_key -iv $encrypted_c574e37cc2d7_iv
