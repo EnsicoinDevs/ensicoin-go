@@ -14,12 +14,18 @@ type Blockchain struct {
 	db *bolt.DB
 
 	GenesisBlock *Block
+
+	index *blockIndex
 }
 
 func NewBlockchain() *Blockchain {
-	return &Blockchain{
+	blockchain := &Blockchain{
 		GenesisBlock: &genesisBlock,
 	}
+
+	blockchain.index = newBlockIndex(blockchain)
+
+	return blockchain
 }
 
 var (
@@ -226,16 +232,16 @@ func (blockchain *Blockchain) FindBlockByHeight(height uint32) (*Block, error) {
 }
 
 func (blockchain *Blockchain) CalcNextBlockDifficulty(block *Block, nextBlock *Block) (uint32, error) {
-	if (nextBlock.Msg.Header.Height % consensus.BLOCKS_PER_RETARGET) != 0 {
+	if nextBlock.Msg.Header.Height < consensus.BLOCKS_PER_RETARGET {
 		return block.Msg.Header.Height, nil
 	}
 
-	lastRetargetBlock, err := blockchain.FindBlockByHeight(nextBlock.Msg.Header.Height - consensus.BLOCKS_PER_RETARGET)
+	lastRetargetBlockEntry, err := blockchain.index.findAncestor(nextBlock, nextBlock.Msg.Header.Height-consensus.BLOCKS_PER_RETARGET)
 	if err != nil {
 		return 0, err
 	}
 
-	realizedTimespan := uint64(nextBlock.Msg.Header.Timestamp.Unix()) - uint64(lastRetargetBlock.Msg.Header.Timestamp.Unix())
+	realizedTimespan := uint64(nextBlock.Msg.Header.Timestamp.Unix()) - uint64(lastRetargetBlockEntry.timestamp.Unix())
 	if realizedTimespan < consensus.MIN_RETARGET_TIMESPAN {
 		realizedTimespan = consensus.MIN_RETARGET_TIMESPAN
 	} else if realizedTimespan > consensus.MAX_RETARGET_TIMESPAN {
@@ -250,5 +256,5 @@ func (blockchain *Blockchain) CalcNextBlockDifficulty(block *Block, nextBlock *B
 }
 
 func (blockchain *Blockchain) ProcessBlock(*Block) bool {
-
+	return false
 }
