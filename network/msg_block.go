@@ -17,7 +17,7 @@ type BlockHeader struct {
 	Timestamp      time.Time
 	Height         uint32
 	Bits           uint32
-	Nonce          uint32
+	Nonce          uint64
 }
 
 func readBlockHeader(reader io.Reader) (*BlockHeader, error) {
@@ -67,7 +67,7 @@ func readBlockHeader(reader io.Reader) (*BlockHeader, error) {
 		return nil, err
 	}
 
-	nonce, err := ReadUint32(reader)
+	nonce, err := ReadUint64(reader)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +127,7 @@ func writeBlockHeader(writer io.Writer, header *BlockHeader) error {
 		return err
 	}
 
-	err = WriteUint32(writer, header.Nonce)
+	err = WriteUint64(writer, header.Nonce)
 	if err != nil {
 		return err
 	}
