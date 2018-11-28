@@ -8,8 +8,8 @@ import (
 type InvVectType uint32
 
 const (
-	INV_VECT_TX    = 0
-	INV_VECT_BLOCK = 1
+	INV_VECT_TX    InvVectType = 0
+	INV_VECT_BLOCK InvVectType = 1
 )
 
 type InvVect struct {

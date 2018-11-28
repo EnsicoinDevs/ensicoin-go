@@ -1,8 +1,9 @@
 package blockchain
 
 import (
-	"encoding/json"
+	"bytes"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
+	"io"
 )
 
 type UtxoEntry struct {
@@ -13,40 +14,72 @@ type UtxoEntry struct {
 	coinBase bool
 }
 
-type utxoEntryJSON struct {
-	amount      uint64 `json:"amount"`
-	script      []byte `json:"script"`
-	blockHeight int    `json:"blockHeight"`
-
-	coinBase bool `json:"coinbase"`
+func newUtxoEntry() *UtxoEntry {
+	return &UtxoEntry{}
 }
 
-func (entry *UtxoEntry) MarshalJSON() ([]byte, error) {
-	return json.Marshal(utxoEntryJSON{
-		amount:      entry.amount,
-		script:      entry.script,
-		blockHeight: entry.blockHeight,
-		coinBase:    entry.coinBase,
-	})
+func (entry *UtxoEntry) MarshalBinary() ([]byte, error) {
+	buf := bytes.NewBuffer(nil)
+
+	err := network.WriteUint64(buf, entry.amount)
+	if err != nil {
+		return nil, err
+	}
+
+	err = network.WriteVarUint(buf, uint64(len(entry.script)))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = buf.Write(entry.script)
+	if err != nil {
+		return nil, err
+	}
+
+	var coinBase uint8
+	if entry.coinBase {
+		coinBase = 1
+	}
+	err = network.WriteUint8(buf, coinBase)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }
 
-func (entry *UtxoEntry) UnmarshalJSON(b []byte) error {
-	tmp := &utxoEntryJSON{}
+func (entry *UtxoEntry) UnmarshalBinary(data []byte) error {
+	buf := bytes.NewBuffer(data)
 
-	if err := json.Unmarshal(b, &tmp); err != nil {
+	var err error
+
+	entry.amount, err = network.ReadUint64(buf)
+	if err != nil {
 		return err
 	}
 
-	entry.amount = tmp.amount
-	entry.script = tmp.script
-	entry.blockHeight = tmp.blockHeight
-	entry.coinBase = tmp.coinBase
+	scriptLength, err := network.ReadVarUint(buf)
+	if err != nil {
+		return err
+	}
+
+	entry.script = make([]byte, scriptLength)
+	_, err = io.ReadFull(buf, entry.script)
+	if err != nil {
+		return err
+	}
+
+	coinBase, err := network.ReadUint8(buf)
+	if err != nil {
+		return err
+	}
+
+	entry.coinBase = true
+	if coinBase == 0 {
+		entry.coinBase = false
+	}
 
 	return nil
-}
-
-func newUtxoEntry() *UtxoEntry {
-	return &UtxoEntry{}
 }
 
 func (entry *UtxoEntry) Amount() uint64 {

@@ -12,6 +12,35 @@ type Outpoint struct {
 	Index uint32
 }
 
+func (outpoint *Outpoint) MarshalBinary() ([]byte, error) {
+	buf := bytes.NewBuffer(make([]byte, 0, 36))
+
+	err := WriteHash(buf, outpoint.Hash)
+	if err != nil {
+		return nil, err
+	}
+
+	err = WriteUint32(buf, outpoint.Index)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+func (outpoint *Outpoint) UnmarshalBinary(data []byte) error {
+	buf := bytes.NewBuffer(data)
+
+	var err error
+	outpoint.Hash, err = ReadHash(buf)
+	if err != nil {
+		return err
+	}
+
+	outpoint.Index, err = ReadUint32(buf)
+	return err
+}
+
 func readOutpoint(reader io.Reader) (*Outpoint, error) {
 	hash, err := ReadHash(reader)
 	if err != nil {

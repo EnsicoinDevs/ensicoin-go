@@ -1,6 +1,7 @@
 package blockchain
 
 import (
+	"bytes"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
 	"github.com/EnsicoinDevs/ensicoincoin/utils"
 	"math/big"
@@ -11,8 +12,44 @@ type Block struct {
 	Txs []*Tx
 }
 
+func NewBlockFromBlockMessage(msg *network.BlockMessage) *Block {
+	block := Block{
+		Msg: msg,
+	}
+
+	for _, tx := range msg.Txs {
+		block.Txs = append(block.Txs, NewTxFromTxMessage(tx))
+	}
+
+	return &block
+}
+
 func (block *Block) Hash() *utils.Hash {
 	return block.Msg.Header.Hash()
+}
+
+func (block *Block) MarshalBinary() ([]byte, error) {
+	buf := bytes.NewBuffer(nil)
+	err := block.Msg.Encode(buf)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+func (block *Block) UnmarshalBinary(data []byte) error {
+	buf := bytes.NewBuffer(data)
+	err := block.Msg.Decode(buf)
+	if err != nil {
+		return err
+	}
+
+	for _, tx := range block.Msg.Txs {
+		block.Txs = append(block.Txs, NewTxFromTxMessage(tx))
+	}
+
+	return nil
 }
 
 func (block *Block) IsSane() bool {

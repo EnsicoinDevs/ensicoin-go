@@ -1,11 +1,13 @@
 package blockchain
 
 import (
-	"encoding/json"
+	"bytes"
+	"github.com/EnsicoinDevs/ensicoincoin/consensus"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
 	"github.com/EnsicoinDevs/ensicoincoin/utils"
 	bolt "github.com/etcd-io/bbolt"
 	"github.com/pkg/errors"
+	"math/big"
 )
 
 type Blockchain struct {
@@ -20,6 +22,14 @@ func NewBlockchain() *Blockchain {
 	}
 }
 
+var (
+	blocksBucket    = []byte("blocks")
+	statsBucket     = []byte("stats")
+	followingBucket = []byte("following")
+	heightsBucket   = []byte("heights")
+	utxosBucket     = []byte("utxos")
+)
+
 func (blockchain *Blockchain) Load() error {
 	var err error
 	blockchain.db, err = bolt.Open("blockchain.db", 0600, nil)
@@ -30,7 +40,7 @@ func (blockchain *Blockchain) Load() error {
 	shouldStoreGenesisBlock := false
 
 	blockchain.db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists([]byte("blocks"))
+		b, err := tx.CreateBucketIfNotExists(blocksBucket)
 		if err != nil {
 			return errors.Wrap(err, "error creating the blocks bucket")
 		}
@@ -40,7 +50,7 @@ func (blockchain *Blockchain) Load() error {
 			shouldStoreGenesisBlock = true
 		}
 
-		b, err = tx.CreateBucketIfNotExists([]byte("stats"))
+		b, err = tx.CreateBucketIfNotExists(statsBucket)
 		if err != nil {
 			return errors.Wrap(err, "error creating the stats bucket")
 		}
@@ -50,12 +60,17 @@ func (blockchain *Blockchain) Load() error {
 			b.Put([]byte("longestChain"), genesisBlock.Hash()[:])
 		}
 
-		_, err = tx.CreateBucketIfNotExists([]byte("following"))
+		_, err = tx.CreateBucketIfNotExists(followingBucket)
 		if err != nil {
 			return errors.Wrap(err, "error creating the following bucket")
 		}
 
-		_, err = tx.CreateBucketIfNotExists([]byte("utxos"))
+		_, err = tx.CreateBucketIfNotExists(heightsBucket)
+		if err != nil {
+			return errors.Wrap(err, "error craeting the heights bucket")
+		}
+
+		_, err = tx.CreateBucketIfNotExists(utxosBucket)
 		if err != nil {
 			return errors.Wrap(err, "error creating the utxos bucket")
 		}
@@ -75,11 +90,11 @@ func (blockchain *Blockchain) FetchUtxos(tx *Tx) (*Utxos, []*network.Outpoint, e
 	var missings []*network.Outpoint
 
 	err := blockchain.db.View(func(btx *bolt.Tx) error {
-		b := btx.Bucket([]byte("utxos"))
+		b := btx.Bucket(utxosBucket)
 
 		for _, input := range tx.Msg.Inputs {
 			outpoint := input.PreviousOutput
-			outpointBytes, err := json.Marshal(outpoint)
+			outpointBytes, err := outpoint.MarshalBinary()
 			if err != nil {
 				return errors.Wrap(err, "error marshaling an outpoint")
 			}
@@ -91,8 +106,9 @@ func (blockchain *Blockchain) FetchUtxos(tx *Tx) (*Utxos, []*network.Outpoint, e
 			}
 
 			var utxo *UtxoEntry
-			if err = json.Unmarshal(utxoBytes, &utxo); err != nil {
-				return errors.Wrap(err, "error unmarshaling an utxo entry")
+			err = utxo.UnmarshalBinary(utxoBytes)
+			if err != nil {
+				return err
 			}
 
 			utxos.AddEntry(outpoint, utxo)
@@ -106,11 +122,11 @@ func (blockchain *Blockchain) FetchUtxos(tx *Tx) (*Utxos, []*network.Outpoint, e
 
 func (blockchain *Blockchain) StoreBlock(block *Block) error {
 	err := blockchain.db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("blocks"))
+		b := tx.Bucket(blocksBucket)
 
-		blockBytes, err := json.Marshal(block)
+		blockBytes, err := block.MarshalBinary()
 		if err != nil {
-			return errors.Wrap(err, "error marshaling the block")
+			return err
 		}
 
 		b.Put(block.Hash()[:], blockBytes)
@@ -125,16 +141,14 @@ func (blockchain *Blockchain) FindBlockByHash(hash *utils.Hash) (*Block, error) 
 	var block *Block
 
 	err := blockchain.db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("blocks"))
+		b := tx.Bucket(blocksBucket)
 
 		blockBytes := b.Get(hash[:])
 		if blockBytes == nil {
 			return nil
 		}
 
-		if err := json.Unmarshal(blockBytes, &block); err != nil {
-			return errors.Wrap(err, "error unmarshaling a block")
-		}
+		block.UnmarshalBinary(blockBytes)
 
 		return nil
 	})
@@ -149,7 +163,7 @@ func (blockchain *Blockchain) FindLongestChain() (*Block, error) {
 	var longestChainHash *utils.Hash
 
 	err := blockchain.db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("stats"))
+		b := tx.Bucket(statsBucket)
 		longestChainHash = utils.NewHash(b.Get([]byte("longestChain")))
 
 		return nil
@@ -170,7 +184,7 @@ func (blockchain *Blockchain) FindBlockHashesStartingAt(hash *utils.Hash) ([]*ut
 	var hashes []*utils.Hash
 
 	err := blockchain.db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("following"))
+		b := tx.Bucket(followingBucket)
 
 		c := b.Cursor()
 
@@ -192,6 +206,49 @@ func (blockchain *Blockchain) FindBlockHashesStartingAt(hash *utils.Hash) ([]*ut
 	return hashes, nil
 }
 
-func (blockchain *Blockchain) HandleBlockMessage() {
+func (blockchain *Blockchain) FindBlockByHeight(height uint32) (*Block, error) {
+	var hash *utils.Hash
+
+	err := blockchain.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket(heightsBucket)
+
+		buf := bytes.NewBuffer(make([]byte, 4))
+		network.WriteUint32(buf, height)
+		hash = utils.NewHash(b.Get(buf.Bytes()))
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return blockchain.FindBlockByHash(hash)
+}
+
+func (blockchain *Blockchain) CalcNextBlockDifficulty(block *Block, nextBlock *Block) (uint32, error) {
+	if (nextBlock.Msg.Header.Height % consensus.BLOCKS_PER_RETARGET) != 0 {
+		return block.Msg.Header.Height, nil
+	}
+
+	lastRetargetBlock, err := blockchain.FindBlockByHeight(nextBlock.Msg.Header.Height - consensus.BLOCKS_PER_RETARGET)
+	if err != nil {
+		return 0, err
+	}
+
+	realizedTimespan := uint64(nextBlock.Msg.Header.Timestamp.Unix()) - uint64(lastRetargetBlock.Msg.Header.Timestamp.Unix())
+	if realizedTimespan < consensus.MIN_RETARGET_TIMESPAN {
+		realizedTimespan = consensus.MIN_RETARGET_TIMESPAN
+	} else if realizedTimespan > consensus.MAX_RETARGET_TIMESPAN {
+		realizedTimespan = consensus.MAX_RETARGET_TIMESPAN
+	}
+
+	targetBefore := BitsToBig(block.Msg.Header.Bits)
+	target := new(big.Int).Mul(targetBefore, big.NewInt(int64(realizedTimespan)))
+	target.Div(target, big.NewInt(consensus.BLOCKS_MEAN_TIMESPAN*consensus.BLOCKS_PER_RETARGET))
+
+	return BigToBits(target), nil
+}
+
+func (blockchain *Blockchain) ProcessBlock(*Block) bool {
 
 }
