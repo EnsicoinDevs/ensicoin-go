@@ -3,6 +3,7 @@ package mempool
 import (
 	"github.com/EnsicoinDevs/ensicoincoin/blockchain"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
+	"github.com/EnsicoinDevs/ensicoincoin/scripts"
 	"github.com/EnsicoinDevs/ensicoincoin/utils"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -96,7 +97,10 @@ func (mempool *Mempool) validateTx(tx *blockchain.Tx) (bool, []*utils.Hash) {
 		return false, nil
 	}
 
-	utxos, missings, _ := mempool.fetchUtxos(tx)
+	utxos, missings, err := mempool.fetchUtxos(tx)
+	if err != nil {
+		return false, nil
+	}
 	if len(missings) != 0 {
 		encountered := make(map[*utils.Hash]bool)
 		for _, outpoint := range missings {
@@ -111,7 +115,17 @@ func (mempool *Mempool) validateTx(tx *blockchain.Tx) (bool, []*utils.Hash) {
 		return true, missingParents
 	}
 
-	_ = utxos
+	for _, input := range tx.Msg.Inputs {
+		utxo := utxos.FindEntry(input.PreviousOutput)
+		script := scripts.NewScript(tx.Msg, input, utxo.Amount(), utxo.Script(), input.Script)
+		valid, err := script.Validate()
+		if err != nil {
+			return false, nil
+		}
+		if !valid {
+			return false, nil
+		}
+	}
 
 	return true, nil
 }
