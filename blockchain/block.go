@@ -81,7 +81,15 @@ func (block *Block) IsSane() bool {
 		}
 	}
 
-	// TODO: build and check the Merkle tree
+	var merkleHashes []*utils.Hash
+	for _, tx := range block.Txs {
+		merkleHashes = append(merkleHashes, tx.Hash())
+	}
+
+	merkleRoot := ComputeMerkleRoot(merkleHashes)
+	if merkleRoot != block.Msg.Header.HashMerkleRoot {
+		return false
+	}
 
 	seenTxHashes := make(map[*utils.Hash]struct{})
 	for _, tx := range block.Txs {

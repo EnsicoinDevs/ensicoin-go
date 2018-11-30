@@ -1,12 +1,15 @@
 package blockchain
 
 import (
+	"bytes"
 	"github.com/EnsicoinDevs/ensicoincoin/consensus"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
+	"github.com/EnsicoinDevs/ensicoincoin/scripts"
 	"github.com/EnsicoinDevs/ensicoincoin/utils"
 	bolt "github.com/etcd-io/bbolt"
 	"github.com/pkg/errors"
 	"math/big"
+	"sync"
 )
 
 type Blockchain struct {
@@ -15,6 +18,10 @@ type Blockchain struct {
 	GenesisBlock *Block
 
 	index *blockIndex
+
+	orphansLock          sync.Mutex
+	orphans              map[*utils.Hash]*Block
+	prevBlockHashOrphans map[*utils.Hash]utils.Hash
 }
 
 func NewBlockchain() *Blockchain {
@@ -32,6 +39,7 @@ var (
 	statsBucket     = []byte("stats")
 	followingBucket = []byte("following")
 	utxosBucket     = []byte("utxos")
+	stxojBucket     = []byte("stxoj")
 )
 
 func (blockchain *Blockchain) Load() error {
@@ -72,6 +80,11 @@ func (blockchain *Blockchain) Load() error {
 		_, err = tx.CreateBucketIfNotExists(utxosBucket)
 		if err != nil {
 			return errors.Wrap(err, "error creating the utxos bucket")
+		}
+
+		_, err = tx.CreateBucketIfNotExists(stxojBucket)
+		if err != nil {
+			return errors.Wrap(err, "error creating the stxoj bucket")
 		}
 
 		return nil
@@ -117,6 +130,36 @@ func (blockchain *Blockchain) FetchUtxos(tx *Tx) (*Utxos, []*network.Outpoint, e
 	})
 
 	return utxos, missings, err
+}
+
+func (blockchain *Blockchain) FetchAllUtxos() (*Utxos, error) {
+	utxos := newUtxos()
+
+	err := blockchain.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket(utxosBucket)
+
+		b.ForEach(func(outpointBytes, utxoBytes []byte) error {
+			var outpoint *network.Outpoint
+			err := outpoint.UnmarshalBinary(outpointBytes)
+			if err != nil {
+				return err
+			}
+
+			var utxo *UtxoEntry
+			err = utxo.UnmarshalBinary(utxoBytes)
+			if err != nil {
+				return err
+			}
+
+			utxos.AddEntry(outpoint, utxo)
+
+			return nil
+		})
+
+		return nil
+	})
+
+	return utxos, err
 }
 
 func (blockchain *Blockchain) StoreBlock(block *Block) error {
@@ -303,7 +346,235 @@ func (blockchain *Blockchain) ValidateTx(tx *Tx, block *Block, utxos *Utxos) (bo
 		return false, 0, nil
 	}
 
+	for _, input := range tx.Msg.Inputs {
+		utxo := utxos.FindEntry(input.PreviousOutput)
+		script := scripts.NewScript(tx.Msg, input, utxo.Amount(), utxo.Script(), input.Script)
+		valid, err := script.Validate()
+		if err != nil {
+			return false, 0, err
+		}
+		if !valid {
+			return false, 0, nil
+		}
+	}
+
 	return false, inputsSum - outputsSum, nil
+}
+
+func (blockchain *Blockchain) StoreUtxos(utxos *Utxos) error {
+	return blockchain.db.Update(func(tx *bolt.Tx) error {
+		err := tx.DeleteBucket(utxosBucket)
+		if err != nil {
+			return err
+		}
+
+		b, err := tx.CreateBucket(utxosBucket)
+		if err != nil {
+			return err
+		}
+
+		for outpoint, entry := range utxos.entries {
+			outpointBytes, err := outpoint.MarshalBinary()
+			if err != nil {
+				return err
+			}
+
+			entryBytes, err := entry.MarshalBinary()
+			if err != nil {
+				return err
+			}
+
+			err = b.Put(outpointBytes, entryBytes)
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+}
+
+func (blockchain *Blockchain) RemoveStxojEntry(blockHash *utils.Hash) error {
+	return blockchain.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(stxojBucket)
+
+		return b.Delete(blockHash[:])
+	})
+}
+
+func (blockchain *Blockchain) StoreStxojEntry(blockHash *utils.Hash, entry []*UtxoEntry) error {
+	return blockchain.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(stxojBucket)
+
+		buf := bytes.NewBuffer(nil)
+
+		for _, stxo := range entry {
+			err := WriteUtxoEntry(buf, stxo)
+			if err != nil {
+				return err
+			}
+		}
+
+		return b.Put(blockHash[:], buf.Bytes())
+	})
+}
+
+func (blockchain *Blockchain) FetchStxojEntry(blockHash *utils.Hash) ([]*UtxoEntry, error) {
+	var utxoEntries []*UtxoEntry
+
+	err := blockchain.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket(stxojBucket)
+
+		buf := bytes.NewBuffer(b.Get(blockHash[:]))
+
+		for buf.Len() != 0 {
+			utxoEntry, err := ReadUtxoEntry(buf)
+			if err != nil {
+				return err
+			}
+
+			utxoEntries = append(utxoEntries, utxoEntry)
+		}
+
+		return nil
+	})
+
+	return utxoEntries, err
+}
+
+func (blockchain *Blockchain) StoreLongestChain(blockHash *utils.Hash) error {
+	return blockchain.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(statsBucket)
+
+		return b.Put([]byte("longestChain"), blockHash[:])
+	})
+}
+
+func (blockchain *Blockchain) PushBlock(block *Block) error {
+	longestChain, err := blockchain.FindLongestChain()
+	if err != nil {
+		return err
+	}
+
+	if longestChain.Hash() != block.Msg.Header.HashPrevBlock {
+		return errors.New("block must extend the best chain")
+	}
+
+	utxos, err := blockchain.FetchAllUtxos()
+	if err != nil {
+		return err
+	}
+
+	var stxoj []*UtxoEntry
+
+	for _, tx := range block.Txs {
+		for _, input := range tx.Msg.Inputs {
+			removedEntry := utxos.RemoveEntry(input.PreviousOutput)
+			stxoj = append(stxoj, removedEntry)
+		}
+
+		for index, output := range tx.Msg.Outputs {
+			utxos.AddEntry(&network.Outpoint{
+				Hash:  tx.Hash(),
+				Index: uint32(index),
+			}, &UtxoEntry{
+				amount:      output.Value,
+				script:      output.Script,
+				blockHeight: block.Msg.Header.Height,
+				coinBase:    tx.IsCoinBase(),
+			})
+		}
+	}
+
+	err = blockchain.StoreLongestChain(block.Hash())
+
+	err = blockchain.StoreStxojEntry(block.Hash(), stxoj)
+	if err != nil {
+		return err
+	}
+
+	err = blockchain.StoreUtxos(utxos)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (blockchain *Blockchain) PopBlock(block *Block) error {
+	longestChain, err := blockchain.FindLongestChain()
+	if err != nil {
+		return err
+	}
+
+	if longestChain.Hash() != block.Hash() {
+		return errors.New("block must be the best block")
+	}
+
+	utxos, err := blockchain.FetchAllUtxos()
+	if err != nil {
+		return err
+	}
+
+	stxoj, err := blockchain.FetchStxojEntry(block.Hash())
+	if err != nil {
+		return err
+	}
+
+	var currentStxoId uint64
+
+	for _, tx := range block.Txs {
+		for index := range tx.Msg.Outputs {
+			utxos.RemoveEntry(&network.Outpoint{
+				Hash:  tx.Hash(),
+				Index: uint32(index),
+			})
+		}
+
+		for _, input := range tx.Msg.Inputs {
+			stxo := stxoj[currentStxoId]
+			currentStxoId++
+
+			entry := utxos.FindEntry(input.PreviousOutput)
+			if entry == nil {
+				entry = newUtxoEntry()
+				utxos.AddEntry(input.PreviousOutput, entry)
+			}
+
+			entry.amount = stxo.amount
+			entry.script = stxo.script
+			entry.blockHeight = stxo.blockHeight
+			entry.coinBase = stxo.coinBase
+		}
+	}
+
+	blockchain.StoreUtxos(utxos)
+	blockchain.RemoveStxojEntry(block.Hash())
+
+	blockchain.StoreLongestChain(block.Msg.Header.HashPrevBlock)
+
+	return nil
+}
+
+func (blockchain *Blockchain) AcceptBlock(block *Block) (bool, error) {
+	err := blockchain.StoreBlock(block)
+	if err != nil {
+		return false, err
+	}
+
+	longestChain, err := blockchain.FindLongestChain()
+	if err != nil {
+		return false, err
+	}
+
+	if longestChain.Hash() == block.Msg.Header.HashPrevBlock {
+		err = blockchain.PushBlock(block)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	return true, nil
 }
 
 func (blockchain *Blockchain) ProcessBlock(block *Block) (bool, error) {
@@ -336,6 +607,11 @@ func (blockchain *Blockchain) ProcessBlock(block *Block) (bool, error) {
 	}
 	if !valid {
 		return false, nil
+	}
+
+	_, err = blockchain.AcceptBlock(block)
+	if err != nil {
+		return false, err
 	}
 
 	// TODO: process orphans

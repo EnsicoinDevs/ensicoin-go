@@ -95,11 +95,9 @@ func (server *Server) syncWith(peer *ServerPeer) {
 		return
 	}
 
-	_ = longestChain
-
-	//peer.Send("getblocks", &network.GetBlocksMessage{
-	//	Hashes: []string{longestChain.Hash},
-	//})
+	peer.Send(&network.GetBlocksMessage{
+		BlockLocator: []*utils.Hash{longestChain.Hash()},
+	})
 
 	server.synced = true
 }
@@ -143,7 +141,13 @@ func (server *Server) handleInvs() {
 					})
 				}
 			case network.INV_VECT_TX:
-				// TODO: handle tx inv
+				tx := server.mempool.FindTxByHash(invVect.Hash)
+				if tx == nil {
+					inventory = append(inventory, &network.InvVect{
+						InvType: network.INV_VECT_TX,
+						Hash:    invVect.Hash,
+					})
+				}
 			default:
 				log.Error("unknown inv vect type")
 			}
@@ -204,7 +208,17 @@ func (peer *ServerPeer) onInv(message *network.InvMessage) {
 }
 
 func (peer *ServerPeer) onBlock(message *network.BlockMessage) {
+	valid, err := peer.server.blockchain.ProcessBlock(blockchain.NewBlockFromBlockMessage(message))
+	if err != nil {
+		log.WithError(err).WithField("block", message).Error("error processing a block")
+	}
+	if !valid {
+		log.WithField("block", message).Info("a block is invalid")
+		return
+	}
 
+	log.WithField("block", message).Info("a block is a valid, broadcasting")
+	peer.server.broadcastBlock(message, peer)
 }
 
 func (server *Server) broadcastTx(tx *blockchain.Tx, sourcePeer *ServerPeer) {
@@ -214,6 +228,19 @@ func (server *Server) broadcastTx(tx *blockchain.Tx, sourcePeer *ServerPeer) {
 				Inventory: []*network.InvVect{&network.InvVect{
 					InvType: network.INV_VECT_TX,
 					Hash:    tx.Hash(),
+				}},
+			})
+		}
+	}
+}
+
+func (server *Server) broadcastBlock(block *network.BlockMessage, sourcePeer *ServerPeer) {
+	for _, peer := range server.peers {
+		if peer != sourcePeer {
+			peer.Send(&network.InvMessage{
+				Inventory: []*network.InvVect{&network.InvVect{
+					InvType: network.INV_VECT_BLOCK,
+					Hash:    block.Header.Hash(),
 				}},
 			})
 		}
@@ -287,7 +314,7 @@ func (peer *ServerPeer) onGetBlocks(message *network.GetBlocksMessage) {
 			continue
 		}
 
-		startAt = block.Hash()
+		startAt = hash
 		break
 	}
 

@@ -18,29 +18,69 @@ func newUtxoEntry() *UtxoEntry {
 	return &UtxoEntry{}
 }
 
+func WriteUtxoEntry(writer io.Writer, entry *UtxoEntry) error {
+	err := network.WriteUint64(writer, entry.amount)
+	if err != nil {
+		return err
+	}
+
+	err = network.WriteVarUint(writer, uint64(len(entry.script)))
+	if err != nil {
+		return err
+	}
+
+	_, err = writer.Write(entry.script)
+	if err != nil {
+		return err
+	}
+
+	var coinBase byte
+	if entry.coinBase {
+		coinBase = 0x01
+	}
+	_, err = writer.Write([]byte{coinBase})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func ReadUtxoEntry(reader io.Reader) (*UtxoEntry, error) {
+	var entry *UtxoEntry
+
+	var err error
+
+	entry.amount, err = network.ReadUint64(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	scriptLength, err := network.ReadVarUint(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	entry.script = make([]byte, scriptLength)
+	_, err = io.ReadFull(reader, entry.script)
+
+	coinBase := make([]byte, 1)
+	_, err = reader.Read(coinBase)
+	if err != nil {
+		return nil, err
+	}
+
+	if coinBase[0] != 0x00 {
+		entry.coinBase = true
+	}
+
+	return entry, nil
+}
+
 func (entry *UtxoEntry) MarshalBinary() ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
 
-	err := network.WriteUint64(buf, entry.amount)
-	if err != nil {
-		return nil, err
-	}
-
-	err = network.WriteVarUint(buf, uint64(len(entry.script)))
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = buf.Write(entry.script)
-	if err != nil {
-		return nil, err
-	}
-
-	var coinBase uint8
-	if entry.coinBase {
-		coinBase = 1
-	}
-	err = network.WriteUint8(buf, coinBase)
+	err := WriteUtxoEntry(buf, entry)
 	if err != nil {
 		return nil, err
 	}
@@ -50,36 +90,11 @@ func (entry *UtxoEntry) MarshalBinary() ([]byte, error) {
 
 func (entry *UtxoEntry) UnmarshalBinary(data []byte) error {
 	buf := bytes.NewBuffer(data)
+	newEntry, err := ReadUtxoEntry(buf)
 
-	var err error
+	*entry = *newEntry
 
-	entry.amount, err = network.ReadUint64(buf)
-	if err != nil {
-		return err
-	}
-
-	scriptLength, err := network.ReadVarUint(buf)
-	if err != nil {
-		return err
-	}
-
-	entry.script = make([]byte, scriptLength)
-	_, err = io.ReadFull(buf, entry.script)
-	if err != nil {
-		return err
-	}
-
-	coinBase, err := network.ReadUint8(buf)
-	if err != nil {
-		return err
-	}
-
-	entry.coinBase = true
-	if coinBase == 0 {
-		entry.coinBase = false
-	}
-
-	return nil
+	return err
 }
 
 func (entry *UtxoEntry) Amount() uint64 {
@@ -125,4 +140,12 @@ func (utxos *Utxos) AddEntryWithTx(outpoint *network.Outpoint, tx *Tx, blockHeig
 
 func (utxos *Utxos) FindEntry(outpoint *network.Outpoint) *UtxoEntry {
 	return utxos.entries[outpoint]
+}
+
+func (utxos *Utxos) RemoveEntry(outpoint *network.Outpoint) *UtxoEntry {
+	entry := utxos.FindEntry(outpoint)
+
+	delete(utxos.entries, outpoint)
+
+	return entry
 }

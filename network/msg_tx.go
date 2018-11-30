@@ -283,6 +283,49 @@ func (msg *TxMessage) Hash() *utils.Hash {
 	return &hash
 }
 
+func (msg *TxMessage) SHash(input *TxIn, value uint64) *utils.Hash {
+	buf := bytes.NewBuffer(nil)
+	_ = WriteUint32(buf, msg.Version)
+	_ = WriteVarUint(buf, uint64(len(msg.Flags)))
+	for _, flag := range msg.Flags {
+		_ = WriteVarString(buf, flag)
+	}
+
+	bufOutpoints := bytes.NewBuffer(nil) // TODO: optimize
+
+	for _, input := range msg.Inputs {
+		_ = writeOutpoint(buf, input.PreviousOutput)
+	}
+
+	hash := sha256.Sum256(bufOutpoints.Bytes())
+
+	hash = sha256.Sum256(hash[:])
+
+	_, _ = buf.Write(hash[:])
+
+	writeOutpoint(buf, input.PreviousOutput)
+
+	_ = WriteUint64(buf, value)
+
+	bufOutputs := bytes.NewBuffer(nil) // TODO: same
+
+	for _, output := range msg.Outputs {
+		_ = writeTxOut(bufOutputs, output)
+	}
+
+	hash = sha256.Sum256(bufOutputs.Bytes())
+
+	hash = sha256.Sum256(hash[:])
+
+	_, _ = buf.Write(hash[:])
+
+	shash := utils.Hash(sha256.Sum256(buf.Bytes()))
+
+	shash = sha256.Sum256(hash[:])
+
+	return &shash
+}
+
 func (msg *TxMessage) MsgType() string {
 	return "tx"
 }
