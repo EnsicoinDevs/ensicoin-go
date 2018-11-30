@@ -2,6 +2,12 @@
 
 
 [[projects]]
+  branch = "master"
+  name = "github.com/btcsuite/btcd"
+  packages = ["btcec"]
+  revision = "7d2daa5bfef28c5e282571bc06416516936115ee"
+
+[[projects]]
   name = "github.com/bwmarrin/discordgo"
   packages = ["."]
   revision = "8325a6bf6dd6c91ed4040a1617b07287b8fb0eba"
@@ -62,6 +68,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "69d830f2eaaab3f312a5d75d402d36d0dfeb7c9d38984fc1d60d81246c85930c"
+  inputs-digest = "d67f16ea4b0e36151c6c9097a16472ca1d953bcaeb83b10c1f6897db5cb5847d"
   solver-name = "gps-cdcl"
   solver-version = 1
