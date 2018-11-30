@@ -13,6 +13,7 @@ type blockIndexEntry struct {
 	hashPrevBlock *utils.Hash
 	height        uint32
 	timestamp     time.Time
+	bits          uint32
 }
 
 type blockIndex struct {
@@ -46,11 +47,16 @@ func (index *blockIndex) findBlock(hash *utils.Hash) (*blockIndexEntry, error) {
 		return nil, err
 	}
 
+	if block == nil {
+		return nil, nil
+	}
+
 	entry = &blockIndexEntry{
 		hash:          block.Hash(),
 		hashPrevBlock: block.Msg.Header.HashPrevBlock,
 		height:        block.Msg.Header.Height,
 		timestamp:     block.Msg.Header.Timestamp,
+		bits:          block.Msg.Header.Bits,
 	}
 
 	index.addEntry(entry)

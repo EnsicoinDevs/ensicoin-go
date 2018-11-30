@@ -9,7 +9,7 @@ import (
 type UtxoEntry struct {
 	amount      uint64
 	script      []byte
-	blockHeight int
+	blockHeight uint32
 
 	coinBase bool
 }
@@ -90,7 +90,7 @@ func (entry *UtxoEntry) Script() []byte {
 	return entry.script
 }
 
-func (entry *UtxoEntry) BlockHeight() int {
+func (entry *UtxoEntry) BlockHeight() uint32 {
 	return entry.blockHeight
 }
 
@@ -112,7 +112,7 @@ func (utxos *Utxos) AddEntry(outpoint *network.Outpoint, entry *UtxoEntry) {
 	utxos.entries[outpoint] = entry
 }
 
-func (utxos *Utxos) AddEntryWithTx(outpoint *network.Outpoint, tx *Tx, blockHeight int) {
+func (utxos *Utxos) AddEntryWithTx(outpoint *network.Outpoint, tx *Tx, blockHeight uint32) {
 	output := tx.Msg.Outputs[outpoint.Index]
 
 	utxos.AddEntry(outpoint, &UtxoEntry{

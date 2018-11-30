@@ -1,7 +1,6 @@
 package blockchain
 
 import (
-	"bytes"
 	"github.com/EnsicoinDevs/ensicoincoin/consensus"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
 	"github.com/EnsicoinDevs/ensicoincoin/utils"
@@ -32,7 +31,6 @@ var (
 	blocksBucket    = []byte("blocks")
 	statsBucket     = []byte("stats")
 	followingBucket = []byte("following")
-	heightsBucket   = []byte("heights")
 	utxosBucket     = []byte("utxos")
 )
 
@@ -69,11 +67,6 @@ func (blockchain *Blockchain) Load() error {
 		_, err = tx.CreateBucketIfNotExists(followingBucket)
 		if err != nil {
 			return errors.Wrap(err, "error creating the following bucket")
-		}
-
-		_, err = tx.CreateBucketIfNotExists(heightsBucket)
-		if err != nil {
-			return errors.Wrap(err, "error craeting the heights bucket")
 		}
 
 		_, err = tx.CreateBucketIfNotExists(utxosBucket)
@@ -212,28 +205,9 @@ func (blockchain *Blockchain) FindBlockHashesStartingAt(hash *utils.Hash) ([]*ut
 	return hashes, nil
 }
 
-func (blockchain *Blockchain) FindBlockByHeight(height uint32) (*Block, error) {
-	var hash *utils.Hash
-
-	err := blockchain.db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket(heightsBucket)
-
-		buf := bytes.NewBuffer(make([]byte, 4))
-		network.WriteUint32(buf, height)
-		hash = utils.NewHash(b.Get(buf.Bytes()))
-
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return blockchain.FindBlockByHash(hash)
-}
-
-func (blockchain *Blockchain) CalcNextBlockDifficulty(block *Block, nextBlock *Block) (uint32, error) {
+func (blockchain *Blockchain) CalcNextBlockDifficulty(block *blockIndexEntry, nextBlock *Block) (uint32, error) {
 	if nextBlock.Msg.Header.Height < consensus.BLOCKS_PER_RETARGET {
-		return block.Msg.Header.Height, nil
+		return block.height, nil
 	}
 
 	lastRetargetBlockEntry, err := blockchain.index.findAncestor(nextBlock, nextBlock.Msg.Header.Height-consensus.BLOCKS_PER_RETARGET)
@@ -248,13 +222,123 @@ func (blockchain *Blockchain) CalcNextBlockDifficulty(block *Block, nextBlock *B
 		realizedTimespan = consensus.MAX_RETARGET_TIMESPAN
 	}
 
-	targetBefore := BitsToBig(block.Msg.Header.Bits)
+	targetBefore := BitsToBig(block.bits)
 	target := new(big.Int).Mul(targetBefore, big.NewInt(int64(realizedTimespan)))
 	target.Div(target, big.NewInt(consensus.BLOCKS_MEAN_TIMESPAN*consensus.BLOCKS_PER_RETARGET))
 
 	return BigToBits(target), nil
 }
 
-func (blockchain *Blockchain) ProcessBlock(*Block) bool {
-	return false
+func (blockchain *Blockchain) ValidateBlock(block *Block) (bool, error) {
+	parentBlock, err := blockchain.index.findBlock(block.Msg.Header.HashPrevBlock)
+	if parentBlock.height+1 != block.Msg.Header.Height {
+		return false, nil
+	}
+
+	nextBits, err := blockchain.CalcNextBlockDifficulty(parentBlock, block)
+	if err != nil {
+		return false, err
+	}
+	if block.Msg.Header.Bits != nextBits {
+		return false, nil
+	}
+
+	var totalFees uint64
+
+	for _, tx := range block.Txs {
+		utxos, notfound, err := blockchain.FetchUtxos(tx)
+		if err != nil {
+			return false, err
+		}
+		if len(notfound) != 0 {
+			return false, nil
+		}
+
+		valid, fees, err := blockchain.ValidateTx(tx, block, utxos)
+		if err == nil {
+			return false, nil
+		}
+		if !valid {
+			return false, nil
+		}
+
+		totalFees += fees
+	}
+
+	var totalCoinbaseAmount uint64
+
+	for _, output := range block.Txs[0].Msg.Outputs {
+		totalCoinbaseAmount += output.Value
+	}
+
+	if totalCoinbaseAmount != totalFees+block.CalcBlockSubsidy() {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+func (blockchain *Blockchain) ValidateTx(tx *Tx, block *Block, utxos *Utxos) (bool, uint64, error) {
+	var inputsSum uint64
+
+	for _, input := range tx.Msg.Inputs {
+		utxo := utxos.FindEntry(input.PreviousOutput)
+
+		if utxo.IsCoinBase() {
+			if block.Msg.Header.Height-utxo.blockHeight < consensus.COINBASE_MATURITY {
+				return false, 0, nil
+			}
+		}
+
+		inputsSum += utxo.Amount()
+	}
+
+	var outputsSum uint64
+
+	for _, output := range tx.Msg.Outputs {
+		outputsSum += output.Value
+	}
+
+	if inputsSum <= outputsSum {
+		return false, 0, nil
+	}
+
+	return false, inputsSum - outputsSum, nil
+}
+
+func (blockchain *Blockchain) ProcessBlock(block *Block) (bool, error) {
+	entry, err := blockchain.index.findBlock(block.Hash())
+	if err != nil {
+		return false, err
+	}
+	if entry != nil {
+		return false, nil
+	}
+
+	// TODO: check if the block exist as an orphan
+
+	if !block.IsSane() {
+		return false, nil
+	}
+
+	entry, err = blockchain.index.findBlock(block.Msg.Header.HashPrevBlock)
+	if err != nil {
+		return false, err
+	}
+	if entry == nil {
+		// TODO: add the block to the orphans pool
+		return false, nil
+	}
+
+	valid, err := blockchain.ValidateBlock(block)
+	if err != nil {
+		return false, err
+	}
+	if !valid {
+		return false, nil
+	}
+
+	// TODO: process orphans
+
+	return true, nil
 }

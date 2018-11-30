@@ -95,6 +95,10 @@ func (block *Block) IsSane() bool {
 	return true
 }
 
+func (block *Block) CalcBlockSubsidy() uint64 {
+	return 42
+}
+
 func BitsToBig(bits uint32) *big.Int {
 	mantissa := int64(bits & 0x00ffffff)
 	exponent := uint(bits >> 24)

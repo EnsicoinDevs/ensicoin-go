@@ -19,16 +19,10 @@ func (tx *Tx) Hash() *utils.Hash {
 	return tx.Msg.Hash()
 }
 
-// Validate applies the validation tests of a transaction and returns true if they pass, false if they fail.
+// IsSane applies the validation tests of a transaction and returns true if they pass, false if they fail.
 func (tx *Tx) IsSane() bool {
 	if len(tx.Msg.Outputs) == 0 {
 		return false
-	}
-
-	for _, output := range tx.Msg.Outputs {
-		if output.Value < 0 {
-			return false
-		}
 	}
 
 	seenInputs := make(map[*network.Outpoint]struct{})

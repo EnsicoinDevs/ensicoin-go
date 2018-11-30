@@ -76,7 +76,7 @@ func (mempool *Mempool) fetchUtxos(tx *blockchain.Tx) (*blockchain.Utxos, []*net
 		if spentTx == nil {
 			missingsAfter = append(missingsAfter, missingOutpoint)
 		} else {
-			utxos.AddEntryWithTx(missingOutpoint, spentTx, -1)
+			utxos.AddEntryWithTx(missingOutpoint, spentTx, 0)
 		}
 	}
 
