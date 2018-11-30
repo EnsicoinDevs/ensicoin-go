@@ -12,6 +12,12 @@ type Block struct {
 	Txs []*Tx
 }
 
+func NewBlock() *Block {
+	return &Block{
+		Msg: network.NewBlockMessage(),
+	}
+}
+
 func NewBlockFromBlockMessage(msg *network.BlockMessage) *Block {
 	block := Block{
 		Msg: msg,

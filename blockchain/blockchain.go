@@ -180,7 +180,7 @@ func (blockchain *Blockchain) StoreBlock(block *Block) error {
 }
 
 func (blockchain *Blockchain) FindBlockByHash(hash *utils.Hash) (*Block, error) {
-	var block *Block
+	block := NewBlock()
 
 	err := blockchain.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket(blocksBucket)

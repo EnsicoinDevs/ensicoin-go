@@ -97,6 +97,7 @@ func (server *Server) syncWith(peer *ServerPeer) {
 
 	peer.Send(&network.GetBlocksMessage{
 		BlockLocator: []*utils.Hash{longestChain.Hash()},
+		HashStop:     utils.NewHash(nil),
 	})
 
 	server.synced = true

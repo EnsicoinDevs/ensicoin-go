@@ -189,7 +189,7 @@ func WriteString(writer io.Writer, value string) error {
 }
 
 func ReadHash(reader io.Reader) (*utils.Hash, error) {
-	var hash *utils.Hash
+	hash := new(utils.Hash)
 	if _, err := io.ReadFull(reader, hash[:]); err != nil {
 		return nil, err
 	}
