@@ -12,6 +12,7 @@ import (
 	"github.com/EnsicoinDevs/ensicoincoin/blockchain"
 	"github.com/EnsicoinDevs/ensicoincoin/consensus"
 	"github.com/EnsicoinDevs/ensicoincoin/mempool"
+	"github.com/EnsicoinDevs/ensicoincoin/miner"
 )
 
 var (
@@ -40,13 +41,28 @@ func main() {
 		FetchUtxos: blockchain.FetchUtxos,
 	})
 
-	server := NewServer(blockchain, mempool)
+	bestBlock, err := blockchain.FindLongestChain()
+	if err != nil {
+		log.WithError(err).Error("error finding the best block")
+	}
+
+	miner := &miner.Miner{
+		Config:     &miner.Config{},
+		BestBlock:  bestBlock,
+		Blockchain: blockchain,
+	}
+
+	server := NewServer(blockchain, mempool, miner)
+
+	miner.Config.ProcessBlock = server.ProcessMinerBlock
 
 	go server.Start()
 
 	if discordToken != "" {
 		startDiscordBootstraping(server)
 	}
+
+	miner.Start()
 
 	log.Info("ENSICOINCOIN is now running")
 
@@ -68,7 +84,7 @@ func main() {
 
 		switch command[0] {
 		case "help":
-			log.Info("quit, help, connect, show_peers, show_mempool")
+			log.Info("quit, help")
 		case "connect":
 			address := command[1]
 
@@ -82,6 +98,7 @@ func main() {
 		}
 	}
 
+	miner.Stop()
 	server.Stop()
 
 	log.Info("Good bye.")

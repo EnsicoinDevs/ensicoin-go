@@ -47,7 +47,7 @@ func WriteUtxoEntry(writer io.Writer, entry *UtxoEntry) error {
 }
 
 func ReadUtxoEntry(reader io.Reader) (*UtxoEntry, error) {
-	var entry *UtxoEntry
+	entry := new(UtxoEntry)
 
 	var err error
 

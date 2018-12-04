@@ -14,7 +14,7 @@ var genesisBlock = Block{
 			Timestamp:      time.Date(2019, 8, 26, 23, 42, 0, 0, time.UTC),
 			HashPrevBlock:  utils.NewHash([]byte("olala")),
 			HashMerkleRoot: utils.NewHash([]byte("olali")),
-			Bits:           1,
+			Bits:           0x1d3ffeff,
 			Nonce:          42,
 		},
 	},

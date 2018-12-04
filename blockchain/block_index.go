@@ -8,7 +8,7 @@ import (
 
 const MAX_ENTRY_IN_BLOCK_INDEX = 4032
 
-type blockIndexEntry struct {
+type BlockIndexEntry struct {
 	hash          *utils.Hash
 	hashPrevBlock *utils.Hash
 	height        uint32
@@ -16,25 +16,25 @@ type blockIndexEntry struct {
 	bits          uint32
 }
 
-type blockIndex struct {
+type BlockIndex struct {
 	blockchain *Blockchain
 
 	mutex     sync.RWMutex
-	index     map[*utils.Hash]*blockIndexEntry
+	index     map[*utils.Hash]*BlockIndexEntry
 	heights   map[uint32][]*utils.Hash
 	minHeight uint32
 }
 
-func newBlockIndex(blockchain *Blockchain) *blockIndex {
-	return &blockIndex{
+func NewBlockIndex(blockchain *Blockchain) *BlockIndex {
+	return &BlockIndex{
 		blockchain: blockchain,
 
-		index:   make(map[*utils.Hash]*blockIndexEntry),
+		index:   make(map[*utils.Hash]*BlockIndexEntry),
 		heights: make(map[uint32][]*utils.Hash),
 	}
 }
 
-func (index *blockIndex) findBlock(hash *utils.Hash) (*blockIndexEntry, error) {
+func (index *BlockIndex) FindBlock(hash *utils.Hash) (*BlockIndexEntry, error) {
 	index.mutex.RLock()
 	entry, exist := index.index[hash]
 	index.mutex.RUnlock()
@@ -51,7 +51,7 @@ func (index *blockIndex) findBlock(hash *utils.Hash) (*blockIndexEntry, error) {
 		return nil, nil
 	}
 
-	entry = &blockIndexEntry{
+	entry = &BlockIndexEntry{
 		hash:          block.Hash(),
 		hashPrevBlock: block.Msg.Header.HashPrevBlock,
 		height:        block.Msg.Header.Height,
@@ -64,7 +64,7 @@ func (index *blockIndex) findBlock(hash *utils.Hash) (*blockIndexEntry, error) {
 	return entry, nil
 }
 
-func (index *blockIndex) addEntry(entry *blockIndexEntry) {
+func (index *BlockIndex) addEntry(entry *BlockIndexEntry) {
 	index.mutex.Lock()
 
 	if len(index.index) == 0 || entry.height < index.minHeight {
@@ -78,7 +78,7 @@ func (index *blockIndex) addEntry(entry *blockIndexEntry) {
 	index.mutex.Unlock()
 }
 
-func (index *blockIndex) ensureMaxSize() {
+func (index *BlockIndex) ensureMaxSize() {
 	for len(index.index) > MAX_ENTRY_IN_BLOCK_INDEX {
 		for _, hash := range index.heights[index.minHeight] {
 			delete(index.index, hash)
@@ -89,14 +89,15 @@ func (index *blockIndex) ensureMaxSize() {
 	}
 }
 
-func (index *blockIndex) findAncestor(block *Block, height uint32) (*blockIndexEntry, error) {
-	entry, err := index.findBlock(block.Hash())
-	if err != nil {
-		return nil, err
-	}
+func (index *BlockIndex) findAncestor(block *Block, height uint32) (*BlockIndexEntry, error) {
+	entry := new(BlockIndexEntry)
+	var err error
+
+	entry.height = block.Msg.Header.Height
+	entry.hashPrevBlock = block.Msg.Header.HashPrevBlock
 
 	for entry.height != height {
-		entry, err = index.findBlock(entry.hashPrevBlock)
+		entry, err = index.FindBlock(entry.hashPrevBlock)
 		if err != nil {
 			return nil, err
 		}

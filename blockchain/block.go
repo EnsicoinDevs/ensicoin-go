@@ -2,9 +2,11 @@ package blockchain
 
 import (
 	"bytes"
+	"errors"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
 	"github.com/EnsicoinDevs/ensicoincoin/utils"
 	"math/big"
+	"reflect"
 )
 
 type Block struct {
@@ -58,32 +60,32 @@ func (block *Block) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-func (block *Block) IsSane() bool {
+func (block *Block) IsSane() error {
 	// header
 
 	if !CheckProofOfWork(block.Msg.Header) {
-		return false
+		return errors.New("bad proof of work")
 	}
 
 	// txs
 
 	if len(block.Txs) == 0 {
-		return false
+		return errors.New("no txs")
 	}
 
 	if !block.Txs[0].IsCoinBase() {
-		return false
+		return errors.New("first tx of the block is not a coinbase")
 	}
 
 	for _, tx := range block.Txs[1:] {
 		if tx.IsCoinBase() {
-			return false
+			return errors.New("the block have more than one coinbase")
 		}
 	}
 
 	for _, tx := range block.Txs {
 		if !tx.IsSane() {
-			return false
+			return errors.New("a tx of the block is not sane")
 		}
 	}
 
@@ -93,24 +95,32 @@ func (block *Block) IsSane() bool {
 	}
 
 	merkleRoot := ComputeMerkleRoot(merkleHashes)
-	if merkleRoot != block.Msg.Header.HashMerkleRoot {
-		return false
+	if !reflect.DeepEqual(merkleRoot, block.Msg.Header.HashMerkleRoot) {
+		return errors.New("the merkle root is not correct")
 	}
 
 	seenTxHashes := make(map[*utils.Hash]struct{})
 	for _, tx := range block.Txs {
 		if _, exists := seenTxHashes[tx.Hash()]; exists {
-			return false
+			return errors.New("a tx is a duplicate")
 		}
 
 		seenTxHashes[tx.Hash()] = struct{}{}
 	}
 
-	return true
+	return nil
 }
 
 func (block *Block) CalcBlockSubsidy() uint64 {
-	return 42
+	if block.Msg.Header.Height == 0 {
+		return 0
+	}
+
+	if block.Msg.Header.Height == 1 {
+		return uint64(0x3ffff)
+	}
+
+	return uint64(0x200000000000) >> ((block.Msg.Header.Height - 1) / 0x40000)
 }
 
 func BitsToBig(bits uint32) *big.Int {

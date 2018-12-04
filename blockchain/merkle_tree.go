@@ -6,6 +6,11 @@ import (
 )
 
 func ComputeMerkleRoot(hashes []*utils.Hash) *utils.Hash {
+	if len(hashes) == 0 {
+		hash := sha256.Sum256(nil)
+		return utils.NewHash(hash[:])
+	} // TODO: delete
+
 	for len(hashes) > 1 {
 		if len(hashes)%2 != 0 {
 			hashes = append(hashes, hashes[len(hashes)-1])

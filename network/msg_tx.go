@@ -3,6 +3,7 @@ package network
 import (
 	"bytes"
 	"crypto/sha256"
+	"fmt"
 	"github.com/EnsicoinDevs/ensicoincoin/utils"
 	"io"
 )
@@ -114,6 +115,10 @@ func writeTxIn(writer io.Writer, txIn *TxIn) error {
 type TxOut struct {
 	Value  uint64
 	Script []byte
+}
+
+func (txOut *TxOut) String() string {
+	return fmt.Sprintf("TxOut[Value: %d, Script: %v]", txOut.Value, txOut.Script)
 }
 
 func readTxOut(reader io.Reader) (*TxOut, error) {
@@ -331,5 +336,5 @@ func (msg *TxMessage) MsgType() string {
 }
 
 func (msg TxMessage) String() string {
-	return "TxMessage[]"
+	return fmt.Sprintf("TxMessage[Version: %d, Flags: %v, Inputs: %v, Outputs: %v]", msg.Version, msg.Flags, msg.Inputs, msg.Outputs)
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"github.com/EnsicoinDevs/ensicoincoin/utils"
 	"io"
 	"time"
@@ -136,7 +137,7 @@ func writeBlockHeader(writer io.Writer, header *BlockHeader) error {
 }
 
 func (header *BlockHeader) Hash() *utils.Hash {
-	buf := bytes.NewBuffer(make([]byte, 0, 232))
+	buf := bytes.NewBuffer(make([]byte, 232))
 	_ = writeBlockHeader(buf, header)
 
 	hash := utils.Hash(sha256.Sum256(buf.Bytes()))
@@ -212,5 +213,5 @@ func (msg *BlockMessage) MsgType() string {
 }
 
 func (msg BlockMessage) String() string {
-	return "MsgBlock[]"
+	return fmt.Sprintf("MsgBlock[Version: %d, Flags: %v, HashPrevBlock: %x, HashMerkleRoot: %x, Timestamp: %v, Height: %d, Bits: %d, Nonce: %d, Txs: %v]", msg.Header.Version, msg.Header.Flags, msg.Header.HashPrevBlock, msg.Header.HashMerkleRoot, msg.Header.Timestamp, msg.Header.Height, msg.Header.Bits, msg.Header.Nonce, msg.Txs)
 }

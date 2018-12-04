@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/EnsicoinDevs/ensicoincoin/blockchain"
 	"github.com/EnsicoinDevs/ensicoincoin/mempool"
+	"github.com/EnsicoinDevs/ensicoincoin/miner"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
 	"github.com/EnsicoinDevs/ensicoincoin/peer"
 	"github.com/EnsicoinDevs/ensicoincoin/utils"
@@ -64,6 +65,7 @@ func (server *Server) newOutgoingServerPeer(conn net.Conn) *ServerPeer {
 type Server struct {
 	blockchain *blockchain.Blockchain
 	mempool    *mempool.Mempool
+	miner      *miner.Miner
 
 	invs chan *invWithPeer
 
@@ -73,10 +75,11 @@ type Server struct {
 	synced bool
 }
 
-func NewServer(blockchain *blockchain.Blockchain, mempool *mempool.Mempool) *Server {
+func NewServer(blockchain *blockchain.Blockchain, mempool *mempool.Mempool, miner *miner.Miner) *Server {
 	server := &Server{
 		blockchain: blockchain,
 		mempool:    mempool,
+		miner:      miner,
 
 		invs: make(chan *invWithPeer),
 	}
@@ -208,13 +211,26 @@ func (peer *ServerPeer) onInv(message *network.InvMessage) {
 	}
 }
 
+func (server *Server) ProcessBlock(message *network.BlockMessage) {
+	valid, err := server.blockchain.ProcessBlock(blockchain.NewBlockFromBlockMessage(message))
+	if err != nil {
+		log.WithError(err).WithField("block", message).Error("error processing a block")
+	}
+	if valid != nil {
+		log.WithField("block", message).WithField("error", valid).Info("a block is invalid")
+		return
+	}
+
+	log.WithField("block", message).Info("a block is valid")
+}
+
 func (peer *ServerPeer) onBlock(message *network.BlockMessage) {
 	valid, err := peer.server.blockchain.ProcessBlock(blockchain.NewBlockFromBlockMessage(message))
 	if err != nil {
 		log.WithError(err).WithField("block", message).Error("error processing a block")
 	}
-	if !valid {
-		log.WithField("block", message).Info("a block is invalid")
+	if valid != nil {
+		log.WithField("block", message).WithField("error", valid).Info("a block is invalid")
 		return
 	}
 
@@ -341,4 +357,17 @@ func (peer *ServerPeer) onGetBlocks(message *network.GetBlocksMessage) {
 	peer.Send(&network.InvMessage{
 		Inventory: inventory,
 	})
+}
+
+func (server *Server) ProcessMinerBlock(block *network.BlockMessage) {
+	server.ProcessBlock(block)
+
+	suchBlock, err := server.blockchain.FindLongestChain()
+	if err != nil {
+		log.WithError(err).Error("error finding such a block")
+	}
+
+	if suchBlock.Hash().IsEqual(block.Header.Hash()) {
+		server.miner.UpdatePrevBlock(suchBlock)
+	}
 }
