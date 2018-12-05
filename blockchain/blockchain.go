@@ -398,6 +398,22 @@ func (blockchain *Blockchain) StoreUtxos(utxos *Utxos) error {
 	})
 }
 
+func (blockchain *Blockchain) StoreFollowing(block *utils.Hash, nextBlock *utils.Hash) error {
+	return blockchain.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(followingBucket)
+
+		return b.Put(block[:], nextBlock[:])
+	})
+}
+
+func (blockchain *Blockchain) RemoveFollowing(block *utils.Hash) error {
+	return blockchain.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(followingBucket)
+
+		return b.Delete(block[:])
+	})
+}
+
 func (blockchain *Blockchain) RemoveStxojEntry(blockHash *utils.Hash) error {
 	return blockchain.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(stxojBucket)
@@ -495,6 +511,8 @@ func (blockchain *Blockchain) PushBlock(block *Block) error {
 		return err
 	}
 
+	err = blockchain.StoreFollowing(longestChain.Hash(), block.Hash())
+
 	err = blockchain.StoreStxojEntry(block.Hash(), stxoj)
 	if err != nil {
 		return err
@@ -558,6 +576,7 @@ func (blockchain *Blockchain) PopBlock(block *Block) error {
 	blockchain.StoreUtxos(utxos)
 	blockchain.RemoveStxojEntry(block.Hash())
 
+	blockchain.RemoveFollowing(block.Msg.Header.HashPrevBlock)
 	blockchain.StoreLongestChain(block.Msg.Header.HashPrevBlock)
 
 	return nil

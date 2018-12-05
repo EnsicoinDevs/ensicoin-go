@@ -1,6 +1,7 @@
 package network
 
 import (
+	"fmt"
 	"github.com/EnsicoinDevs/ensicoincoin/utils"
 	"io"
 )
@@ -90,5 +91,5 @@ func (msg *InvMessage) MsgType() string {
 }
 
 func (msg InvMessage) String() string {
-	return "InvMessage[]"
+	return fmt.Sprintf("InvMessage[Inventory: %v]", msg.Inventory)
 }

@@ -31,7 +31,7 @@ func readMessageHeader(reader io.Reader) (*messageHeader, error) {
 		return nil, err
 	}
 
-	length, err := ReadVarUint(reader)
+	length, err := ReadUint64(reader)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +57,7 @@ func writeMessageHeader(writer io.Writer, header *messageHeader) error {
 		return err
 	}
 
-	return WriteVarUint(writer, header.length)
+	return WriteUint64(writer, header.length)
 }
 
 func newMessageByType(msgType string) (Message, error) {

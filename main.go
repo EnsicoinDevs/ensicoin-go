@@ -19,12 +19,14 @@ var (
 	peerPort        int
 	discordToken    string
 	interactiveMode bool
+	mining          bool
 )
 
 func init() {
 	flag.IntVar(&peerPort, "port", consensus.INGOING_PORT, "The port of the node.")
 	flag.StringVar(&discordToken, "token", "", "A discord token.")
 	flag.BoolVar(&interactiveMode, "i", false, "Interactive mode.")
+	flag.BoolVar(&mining, "mining", false, "Miner mode.")
 }
 
 func main() {
@@ -62,7 +64,9 @@ func main() {
 		startDiscordBootstraping(server)
 	}
 
-	miner.Start()
+	if mining {
+		miner.Start()
+	}
 
 	log.Info("ENSICOINCOIN is now running")
 
