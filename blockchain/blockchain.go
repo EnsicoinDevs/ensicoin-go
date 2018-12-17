@@ -2,7 +2,7 @@ package blockchain
 
 import (
 	"bytes"
-	"fmt"
+	"encoding/binary"
 	"github.com/EnsicoinDevs/ensicoincoin/consensus"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
 	"github.com/EnsicoinDevs/ensicoincoin/scripts"
@@ -38,6 +38,7 @@ func NewBlockchain() *Blockchain {
 
 var (
 	blocksBucket    = []byte("blocks")
+	heightsBucket   = []byte("heights")
 	statsBucket     = []byte("stats")
 	followingBucket = []byte("following")
 	utxosBucket     = []byte("utxos")
@@ -72,6 +73,11 @@ func (blockchain *Blockchain) Load() error {
 		longestChainInDb := b.Get([]byte("longestChain"))
 		if longestChainInDb == nil {
 			b.Put([]byte("longestChain"), genesisBlock.Hash()[:])
+		}
+
+		_, err = tx.CreateBucketIfNotExists(heightsBucket)
+		if err != nil {
+			return errors.Wrap(err, "error creating the heights bucket")
 		}
 
 		_, err = tx.CreateBucketIfNotExists(followingBucket)
@@ -470,6 +476,36 @@ func (blockchain *Blockchain) StoreLongestChain(blockHash *utils.Hash) error {
 	})
 }
 
+func (blockchain *Blockchain) StoreBlockHashAtHeight(blockHash *utils.Hash, height uint32) error {
+	return blockchain.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(heightsBucket)
+
+		heightBytes := make([]byte, 4)
+
+		binary.BigEndian.PutUint32(heightBytes, height)
+
+		return b.Put(heightBytes, blockHash[:])
+	})
+}
+
+func (blockchain *Blockchain) GetBlockHashAtHeight(height uint32) (*utils.Hash, error) {
+	var hash *utils.Hash
+
+	err := blockchain.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket(heightsBucket)
+
+		heightBytes := make([]byte, 4)
+
+		binary.BigEndian.PutUint32(heightBytes, height)
+
+		hash = utils.NewHash(b.Get(heightBytes))
+
+		return nil
+	})
+
+	return hash, err
+}
+
 func (blockchain *Blockchain) PushBlock(block *Block) error {
 	longestChain, err := blockchain.FindLongestChain()
 	if err != nil {
@@ -512,6 +548,9 @@ func (blockchain *Blockchain) PushBlock(block *Block) error {
 	}
 
 	err = blockchain.StoreFollowing(longestChain.Hash(), block.Hash())
+	if err != nil {
+		return err
+	}
 
 	err = blockchain.StoreStxojEntry(block.Hash(), stxoj)
 	if err != nil {
@@ -519,6 +558,16 @@ func (blockchain *Blockchain) PushBlock(block *Block) error {
 	}
 
 	err = blockchain.StoreUtxos(utxos)
+	if err != nil {
+		return err
+	}
+
+	err = blockchain.StoreBlockHashAtHeight(block.Hash(), block.Msg.Header.Height)
+	if err != nil {
+		return err
+	}
+
+	err = blockchain.StoreBlockHashAtHeight(block.Hash(), block.Msg.Header.Height)
 	if err != nil {
 		return err
 	}
@@ -601,8 +650,6 @@ func (blockchain *Blockchain) AcceptBlock(block *Block) (bool, error) {
 
 		return true, nil
 	}
-
-	fmt.Println("hum")
 
 	return true, nil
 }

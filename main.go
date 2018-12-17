@@ -68,6 +68,10 @@ func main() {
 		miner.Start()
 	}
 
+	rpcServer := newRpcServer(blockchain)
+
+	go rpcServer.Start()
+
 	log.Info("ENSICOINCOIN is now running")
 
 	if !interactiveMode {

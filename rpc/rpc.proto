@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package rpc;
+
+service Blockchain {
+  rpc GetBlockHashAtHeight (GetBlockHashAtHeightRequest) returns (GetBlockHashAtHeightReply) {}
+  rpc GetBlockByHash (GetBlockByHashRequest) returns (GetBlockByHashReply) {}
+  rpc GetMainChainHeight (GetMainChainHeightRequest) returns (GetMainChainHeightReply) {}
+  rpc GetMainChain (GetMainChainRequest) returns (GetMainChainReply) {}
+}
+
+message Block {
+  uint32 version = 1;
+  repeated string flags = 2;
+  string hash = 3;
+  string hashPrevBlock = 4;
+  string hashMerkleRoot = 5;
+  int64 timestamp = 6;
+  uint32 height = 7;
+  uint32 bits = 8;
+  uint64 nonce = 9;
+}
+
+message GetBlockHashAtHeightRequest {
+  uint32 height = 1;
+}
+
+message GetBlockHashAtHeightReply {
+  string hash = 1;
+}
+
+message GetBlockByHashRequest {
+  string hash = 1;
+}
+
+message GetBlockByHashReply {
+  Block block = 1;
+}
+
+message GetMainChainHeightRequest {}
+
+message GetMainChainHeightReply {
+  uint32 height = 1;
+}
+
+message GetMainChainRequest {}
+
+message GetMainChainReply {
+  string hash = 1;
+}
