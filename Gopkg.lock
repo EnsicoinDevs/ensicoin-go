@@ -23,6 +23,12 @@
   name = "github.com/golang/protobuf"
   packages = [
     "proto",
+    "protoc-gen-go",
+    "protoc-gen-go/descriptor",
+    "protoc-gen-go/generator",
+    "protoc-gen-go/generator/internal/remap",
+    "protoc-gen-go/grpc",
+    "protoc-gen-go/plugin",
     "ptypes",
     "ptypes/any",
     "ptypes/duration",
@@ -38,10 +44,10 @@
   version = "v1.4.0"
 
 [[projects]]
-  branch = "master"
   name = "github.com/konsorten/go-windows-terminal-sequences"
   packages = ["."]
-  revision = "b729f2633dfe35f4d1d8a32385f6685610ce1cb5"
+  revision = "5c8c8bd35d3832f5d134ae1e1e375b69a4d25242"
+  version = "v1.0.1"
 
 [[projects]]
   name = "github.com/pkg/errors"
@@ -52,8 +58,8 @@
 [[projects]]
   name = "github.com/sirupsen/logrus"
   packages = ["."]
-  revision = "a67f783a3814b8729bd2dac5780b5f78f8dbd64d"
-  version = "v1.1.0"
+  revision = "bcd833dfe83d3cebad139e4a29ed79cb2318bf95"
+  version = "v1.2.0"
 
 [[projects]]
   branch = "master"
@@ -66,7 +72,7 @@
     "salsa20/salsa",
     "ssh/terminal"
   ]
-  revision = "0e37d006457bf46f9e6692014ba72ef82c33022c"
+  revision = "505ab145d0a99da450461ae2c1a9f6cd10d1f447"
 
 [[projects]]
   branch = "master"
@@ -89,7 +95,7 @@
     "unix",
     "windows"
   ]
-  revision = "c2ed4eda69e7f62900806e4cd6e45f0429f859fa"
+  revision = "b4a75ba826a64a70990f11a225237acd6ef35c9f"
 
 [[projects]]
   name = "golang.org/x/text"
@@ -159,6 +165,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "eb45361968da9261c7c2e093b1295f50dec146e939eb6b09a0632ece0e56ad59"
+  inputs-digest = "801c5ca331985bab383c455b4e21bcb8222baba6c1289eabe660d265b82c4f2a"
   solver-name = "gps-cdcl"
   solver-version = 1
