@@ -12,7 +12,7 @@ type Address struct {
 	Port      uint16
 }
 
-func readAddress(reader io.Reader) (*Address, error) {
+func ReadAddress(reader io.Reader) (*Address, error) {
 	timestamp, err := ReadUint64(reader)
 	if err != nil {
 		return nil, err
@@ -35,6 +35,20 @@ func readAddress(reader io.Reader) (*Address, error) {
 	}, nil
 }
 
+func WriteAddress(writer io.Writer, address *Address) error {
+	err := WriteUint64(writer, uint64(address.Timestamp.Unix()))
+	if err != nil {
+		return err
+	}
+
+	_, err = writer.Write(address.IP)
+	if err != nil {
+		return err
+	}
+
+	return WriteUint16(writer, address.Port)
+}
+
 type AddrMessage struct {
 	Addresses []*Address
 }
@@ -50,7 +64,7 @@ func (msg *AddrMessage) Decode(reader io.Reader) error {
 	}
 
 	for i := uint64(0); i < count; i++ {
-		address, err := readAddress(reader)
+		address, err := ReadAddress(reader)
 		if err != nil {
 			return err
 		}

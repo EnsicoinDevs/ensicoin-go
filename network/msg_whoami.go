@@ -3,12 +3,11 @@ package network
 import (
 	"fmt"
 	"io"
-	"time"
 )
 
 type WhoamiMessage struct {
-	Version   uint32
-	Timestamp time.Time
+	Version uint32
+	From    *Address
 }
 
 func NewWhoamiMessage() *WhoamiMessage {
@@ -21,13 +20,13 @@ func (msg *WhoamiMessage) Decode(reader io.Reader) error {
 		return err
 	}
 
-	timestamp, err := ReadUint64(reader)
+	address, err := ReadAddress(reader)
 	if err != nil {
 		return err
 	}
 
 	msg.Version = version
-	msg.Timestamp = time.Unix(int64(timestamp), 0)
+	msg.From = address
 
 	return nil
 }
@@ -38,7 +37,7 @@ func (msg *WhoamiMessage) Encode(writer io.Writer) error {
 		return err
 	}
 
-	return WriteUint64(writer, uint64(msg.Timestamp.Unix()))
+	return WriteAddress(writer, msg.From)
 }
 
 func (msg *WhoamiMessage) MsgType() string {
@@ -46,5 +45,5 @@ func (msg *WhoamiMessage) MsgType() string {
 }
 
 func (msg WhoamiMessage) String() string {
-	return fmt.Sprintf("WhoamiMessage[version=%d, timestamp=%v]", msg.Version, msg.Timestamp)
+	return fmt.Sprintf("WhoamiMessage[version=%d, from=%v]", msg.Version, msg.From)
 }
