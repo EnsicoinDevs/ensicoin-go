@@ -10,6 +10,7 @@ import (
 	"github.com/EnsicoinDevs/ensicoincoin/utils"
 	log "github.com/sirupsen/logrus"
 	"net"
+	"time"
 )
 
 type invWithPeer struct {
@@ -177,6 +178,10 @@ func (sp *ServerPeer) onReady() {
 	if !sp.Ingoing() {
 		sp.Send(&network.WhoamiMessage{
 			Version: 0,
+			From: &network.Address{
+				Timestamp: time.Now(),
+				IP:        net.IPv4(0, 0, 0, 0),
+			},
 		})
 	}
 }
@@ -187,6 +192,10 @@ func (sp *ServerPeer) onWhoami(message *network.WhoamiMessage) {
 	if sp.Ingoing() {
 		sp.Send(&network.WhoamiMessage{
 			Version: 0,
+			From: &network.Address{
+				Timestamp: time.Now(),
+				IP:        net.IPv4(0, 0, 0, 0),
+			},
 		})
 		// sp.Connected = true
 	} else {
