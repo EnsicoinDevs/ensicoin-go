@@ -19,6 +19,29 @@ message Block {
   uint32 height = 7;
   uint32 bits = 8;
   uint64 nonce = 9;
+  repeated Tx txs = 10;
+}
+
+message Tx {
+  uint32 version = 1;
+  repeated string flags = 2;
+  repeated Input inputs = 3;
+  repeated Output outputs = 4;
+}
+
+message Input {
+  Outpoint previousOutput = 1;
+  bytes script = 2;
+}
+
+message Outpoint {
+  string hash = 1;
+  uint32 index = 2;
+}
+
+message Output {
+  uint64 value = 1;
+  bytes script = 2;
 }
 
 message GetBlockHashAtHeightRequest {

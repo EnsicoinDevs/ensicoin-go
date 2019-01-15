@@ -6,7 +6,6 @@ import (
 	"github.com/EnsicoinDevs/ensicoincoin/blockchain"
 	pb "github.com/EnsicoinDevs/ensicoincoin/rpc"
 	"github.com/EnsicoinDevs/ensicoincoin/utils"
-	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"net"
@@ -50,14 +49,10 @@ func (s *rpcServer) GetBlockByHash(ctx context.Context, in *pb.GetBlockByHashReq
 		return nil, err
 	}
 
-	log.WithField("hash", in.GetHash()).WithField("hash2", hash).Info("hashes")
-
-	log.WithField("block", block).Info("block")
-
 	hashPrevBlock := hex.EncodeToString(block.Msg.Header.HashPrevBlock[:])
 	hashMerkleRoot := hex.EncodeToString(block.Msg.Header.HashMerkleRoot[:])
 
-	return &pb.GetBlockByHashReply{
+	reply := &pb.GetBlockByHashReply{
 		Block: &pb.Block{
 			Version:        block.Msg.Header.Version,
 			Flags:          block.Msg.Header.Flags,
@@ -69,7 +64,37 @@ func (s *rpcServer) GetBlockByHash(ctx context.Context, in *pb.GetBlockByHashReq
 			Bits:           block.Msg.Header.Bits,
 			Nonce:          block.Msg.Header.Nonce,
 		},
-	}, nil
+	}
+
+	for _, tx := range block.Txs {
+		replyTx := &pb.Tx{
+			Version: tx.Msg.Version,
+			Flags:   tx.Msg.Flags,
+		}
+
+		for _, input := range tx.Msg.Inputs {
+			hashPreviousOutput := hex.EncodeToString(input.PreviousOutput.Hash[:])
+
+			replyTx.Inputs = append(replyTx.Inputs, &pb.Input{
+				PreviousOutput: &pb.Outpoint{
+					Hash:  hashPreviousOutput,
+					Index: input.PreviousOutput.Index,
+				},
+				Script: input.Script,
+			})
+		}
+
+		for _, output := range tx.Msg.Outputs {
+			replyTx.Outputs = append(replyTx.Outputs, &pb.Output{
+				Value:  output.Value,
+				Script: output.Script,
+			})
+		}
+
+		reply.Block.Txs = append(reply.Block.Txs, replyTx)
+	}
+
+	return reply, nil
 }
 
 func (s *rpcServer) GetBlockHashAtHeight(ctx context.Context, in *pb.GetBlockHashAtHeightRequest) (*pb.GetBlockHashAtHeightReply, error) {
