@@ -6,8 +6,9 @@ import (
 )
 
 type WhoamiMessage struct {
-	Version uint32
-	From    *Address
+	Version  uint32
+	From     *Address
+	Services []string
 }
 
 func NewWhoamiMessage() *WhoamiMessage {
@@ -25,6 +26,20 @@ func (msg *WhoamiMessage) Decode(reader io.Reader) error {
 		return err
 	}
 
+	servicesCount, err := ReadVarUint(reader)
+	if err != nil {
+		return err
+	}
+
+	for i := uint64(0); i < servicesCount; i++ {
+		service, err := ReadVarString(reader)
+		if err != nil {
+			return err
+		}
+
+		msg.Services = append(msg.Services, service)
+	}
+
 	msg.Version = version
 	msg.From = address
 
@@ -37,7 +52,24 @@ func (msg *WhoamiMessage) Encode(writer io.Writer) error {
 		return err
 	}
 
-	return WriteAddress(writer, msg.From)
+	err = WriteAddress(writer, msg.From)
+	if err != nil {
+		return err
+	}
+
+	err = WriteVarUint(writer, uint64(len(msg.Services)))
+	if err != nil {
+		return err
+	}
+
+	for _, service := range msg.Services {
+		err = WriteVarString(writer, service)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (msg *WhoamiMessage) MsgType() string {

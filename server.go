@@ -182,6 +182,7 @@ func (sp *ServerPeer) onReady() {
 				Timestamp: time.Now(),
 				IP:        net.IPv4(0, 0, 0, 0),
 			},
+			Services: []string{"node"},
 		})
 	}
 }
@@ -196,6 +197,7 @@ func (sp *ServerPeer) onWhoami(message *network.WhoamiMessage) {
 				Timestamp: time.Now(),
 				IP:        net.IPv4(0, 0, 0, 0),
 			},
+			Services: []string{"node"},
 		})
 		// sp.Connected = true
 	} else {
