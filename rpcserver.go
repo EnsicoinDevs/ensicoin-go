@@ -38,7 +38,7 @@ func (s *rpcServer) Start() error {
 	return nil
 }
 
-func (s *rpcServer) GetBlockByHash(ctx context.Context, in *pb.GetBlockByHashRequest) (*pb.GetBlockByHashReply, error) {
+func (s *rpcServer) GetBlock(ctx context.Context, in *pb.GetBlockRequest) (*pb.GetBlockReply, error) {
 	hash, err := hex.DecodeString(in.GetHash())
 	if err != nil {
 		return nil, err
@@ -52,11 +52,11 @@ func (s *rpcServer) GetBlockByHash(ctx context.Context, in *pb.GetBlockByHashReq
 	hashPrevBlock := hex.EncodeToString(block.Msg.Header.HashPrevBlock[:])
 	hashMerkleRoot := hex.EncodeToString(block.Msg.Header.HashMerkleRoot[:])
 
-	reply := &pb.GetBlockByHashReply{
+	reply := &pb.GetBlockReply{
 		Block: &pb.Block{
+			Hash:           in.GetHash(),
 			Version:        block.Msg.Header.Version,
 			Flags:          block.Msg.Header.Flags,
-			Hash:           in.GetHash(),
 			HashPrevBlock:  hashPrevBlock,
 			HashMerkleRoot: hashMerkleRoot,
 			Timestamp:      block.Msg.Header.Timestamp.Unix(),
@@ -67,7 +67,10 @@ func (s *rpcServer) GetBlockByHash(ctx context.Context, in *pb.GetBlockByHashReq
 	}
 
 	for _, tx := range block.Txs {
+		txHash := tx.Msg.Hash()
+
 		replyTx := &pb.Tx{
+			Hash:    hex.EncodeToString(txHash[:]),
 			Version: tx.Msg.Version,
 			Flags:   tx.Msg.Flags,
 		}
@@ -97,28 +100,13 @@ func (s *rpcServer) GetBlockByHash(ctx context.Context, in *pb.GetBlockByHashReq
 	return reply, nil
 }
 
-func (s *rpcServer) GetBlockHashAtHeight(ctx context.Context, in *pb.GetBlockHashAtHeightRequest) (*pb.GetBlockHashAtHeightReply, error) {
-	hash, err := s.blockchain.GetBlockHashAtHeight(in.GetHeight())
-	if err != nil {
-		return nil, err
-	}
-
-	return &pb.GetBlockHashAtHeightReply{
-		Hash: hex.EncodeToString(hash[:]),
-	}, nil
-}
-
-func (s *rpcServer) GetMainChain(ctx context.Context, in *pb.GetMainChainRequest) (*pb.GetMainChainReply, error) {
-	return nil, nil
-}
-
-func (s *rpcServer) GetMainChainHeight(ctx context.Context, in *pb.GetMainChainHeightRequest) (*pb.GetMainChainHeightReply, error) {
+func (s *rpcServer) GetBestBlockHash(ctx context.Context, in *pb.GetBestBlockHashRequest) (*pb.GetBestBlockHashReply, error) {
 	block, err := s.blockchain.FindLongestChain()
 	if err != nil {
 		return nil, err
 	}
 
-	return &pb.GetMainChainHeightReply{
-		Height: block.Msg.Header.Height,
+	return &pb.GetBestBlockHashReply{
+		Hash: hex.EncodeToString(block.Hash()[:]),
 	}, nil
 }

@@ -3,16 +3,14 @@ syntax = "proto3";
 package rpc;
 
 service Blockchain {
-  rpc GetBlockHashAtHeight (GetBlockHashAtHeightRequest) returns (GetBlockHashAtHeightReply) {}
-  rpc GetBlockByHash (GetBlockByHashRequest) returns (GetBlockByHashReply) {}
-  rpc GetMainChainHeight (GetMainChainHeightRequest) returns (GetMainChainHeightReply) {}
-  rpc GetMainChain (GetMainChainRequest) returns (GetMainChainReply) {}
+  rpc GetBlock (GetBlockRequest) returns (GetBlockReply) {}
+  rpc GetBestBlockHash (GetBestBlockHashRequest) returns (GetBestBlockHashReply) {}
 }
 
 message Block {
-  uint32 version = 1;
-  repeated string flags = 2;
-  string hash = 3;
+  string hash = 1;
+  uint32 version = 2;
+  repeated string flags = 3;
   string hashPrevBlock = 4;
   string hashMerkleRoot = 5;
   int64 timestamp = 6;
@@ -23,10 +21,11 @@ message Block {
 }
 
 message Tx {
-  uint32 version = 1;
-  repeated string flags = 2;
-  repeated Input inputs = 3;
-  repeated Output outputs = 4;
+  string hash = 1;
+  uint32 version = 2;
+  repeated string flags = 3;
+  repeated Input inputs = 4;
+  repeated Output outputs = 5;
 }
 
 message Input {
@@ -44,30 +43,16 @@ message Output {
   bytes script = 2;
 }
 
-message GetBlockHashAtHeightRequest {
-  uint32 height = 1;
-}
-
-message GetBlockHashAtHeightReply {
+message GetBlockRequest {
   string hash = 1;
 }
 
-message GetBlockByHashRequest {
-  string hash = 1;
-}
-
-message GetBlockByHashReply {
+message GetBlockReply {
   Block block = 1;
 }
 
-message GetMainChainHeightRequest {}
+message GetBestBlockHashRequest {}
 
-message GetMainChainHeightReply {
-  uint32 height = 1;
-}
-
-message GetMainChainRequest {}
-
-message GetMainChainReply {
+message GetBestBlockHashReply {
   string hash = 1;
 }
