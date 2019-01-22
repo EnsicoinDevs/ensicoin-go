@@ -83,6 +83,8 @@ func (miner *Miner) solve() bool {
 			miner.quit <- struct{}{}
 			return false
 		case <-ticker.C:
+			log.WithField("nonce", miner.block.Header.Nonce).Debug("solving...")
+
 			bestHeight = miner.BestBlock.Msg.Header.Height
 
 			if bestHeight+1 != miner.block.Header.Height {
