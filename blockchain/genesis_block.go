@@ -13,7 +13,7 @@ var genesisBlock = Block{
 		Header: &network.BlockHeader{
 			Version:        0,
 			Flags:          []string{"ici cest limag"},
-			Timestamp:      time.Date(2019, 8, 26, 23, 42, 0, 0, time.UTC),
+			Timestamp:      time.Date(2019, 01, 22, 00, 42, 0, 0, time.UTC),
 			HashPrevBlock:  utils.NewHash([]byte{FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT}),
 			HashMerkleRoot: utils.NewHash([]byte{FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT, FT}),
 			Bits:           0x1e00f000,
