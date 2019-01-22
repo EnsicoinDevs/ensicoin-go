@@ -587,6 +587,11 @@ func (blockchain *Blockchain) PushBlock(block *Block) error {
 		return err
 	}
 
+	err = blockchain.StoreFollowing(block.Msg.Header.HashPrevBlock, block.Hash())
+	if err != nil {
+		return err
+	}
+
 	blockchain.PushedBlocks <- block
 
 	return nil
@@ -639,11 +644,25 @@ func (blockchain *Blockchain) PopBlock(block *Block) error {
 		}
 	}
 
-	blockchain.StoreUtxos(utxos)
-	blockchain.RemoveStxojEntry(block.Hash())
+	err = blockchain.StoreUtxos(utxos)
+	if err != nil {
+		return err
+	}
 
-	blockchain.RemoveFollowing(block.Msg.Header.HashPrevBlock)
-	blockchain.StoreLongestChain(block.Msg.Header.HashPrevBlock)
+	err = blockchain.RemoveStxojEntry(block.Hash())
+	if err != nil {
+		return err
+	}
+
+	err = blockchain.RemoveFollowing(block.Msg.Header.HashPrevBlock)
+	if err != nil {
+		return err
+	}
+
+	err = blockchain.StoreLongestChain(block.Msg.Header.HashPrevBlock)
+	if err != nil {
+		return err
+	}
 
 	blockchain.PoppedBlocks <- block
 
