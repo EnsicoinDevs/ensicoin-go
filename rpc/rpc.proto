@@ -7,6 +7,14 @@ service Blockchain {
   rpc GetBestBlockHash (GetBestBlockHashRequest) returns (GetBestBlockHashReply) {}
 }
 
+service Txs {
+	rpc PublishTx (PublishTxRequest) returns (PublishTxReply) {}
+}
+
+message Error {
+  uint32 code = 1;
+}
+
 message Block {
   string hash = 1;
   uint32 version = 2;
@@ -55,4 +63,13 @@ message GetBestBlockHashRequest {}
 
 message GetBestBlockHashReply {
   string hash = 1;
+}
+
+message PublishTxRequest {
+  bytes tx = 1;
+}
+
+message PublishTxReply {
+  Error error = 1;
+  string hash = 2;
 }

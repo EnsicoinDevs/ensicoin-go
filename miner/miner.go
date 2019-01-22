@@ -1,14 +1,14 @@
 package miner
 
 import (
-	"fmt"
 	"github.com/EnsicoinDevs/ensicoincoin/blockchain"
+	"github.com/EnsicoinDevs/ensicoincoin/mempool"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
 	"github.com/EnsicoinDevs/ensicoincoin/utils"
 	log "github.com/sirupsen/logrus"
 	"math"
 	"math/big"
-	"sync"
+	"strconv"
 	"time"
 )
 
@@ -19,31 +19,93 @@ type Config struct {
 type Miner struct {
 	Config *Config
 
-	Lock  sync.Mutex
 	block *network.BlockMessage
 
-	BestBlock  *blockchain.Block
-	Blockchain *blockchain.Blockchain
+	BestBlock *blockchain.Block
 
-	quit    chan struct{}
-	solving bool
-	target  *big.Int
+	Blockchain *blockchain.Blockchain
+	Mempool    *mempool.Mempool
+
+	quit   chan struct{}
+	target *big.Int
 }
 
 func (miner *Miner) Start() {
 	miner.quit = make(chan struct{})
 
-	if miner.BestBlock != nil {
+	log.Info("Miner is now running.")
+
+	go miner.startMainLoop()
+}
+
+func (miner *Miner) startMainLoop() {
+	for {
+		select {
+		case <-miner.quit:
+			return
+		default:
+		}
+
+		if miner.BestBlock == nil {
+			log.Debug("bestblock is nil")
+			time.Sleep(time.Second)
+			continue
+		}
+
 		miner.generateBlock()
-		go miner.solve()
+
+		blockFound := miner.solve()
+
+		if blockFound {
+			log.Debug("block found")
+
+			if miner.block.Header.Height == miner.BestBlock.Msg.Header.Height+1 {
+				miner.BestBlock = nil
+				miner.Config.ProcessBlock(miner.block)
+			} else {
+				log.Debug("the miner found a nonce for an outdated block")
+			}
+		}
+	}
+}
+
+func (miner *Miner) solve() bool {
+	log.Debug("solver is running")
+
+	var hash *utils.Hash
+	var bestHeight uint32
+
+	ticker := time.NewTicker(time.Second)
+
+	for miner.block.Header.Nonce < math.MaxUint64 {
+		select {
+		case <-miner.quit:
+			miner.quit <- struct{}{}
+			return false
+		case <-ticker.C:
+			bestHeight = miner.BestBlock.Msg.Header.Height
+
+			if bestHeight+1 != miner.block.Header.Height {
+				log.Debug("bestblock is no more the best block")
+
+				return false
+			}
+		default:
+		}
+
+		miner.block.Header.Nonce += 1
+
+		hash = miner.block.Header.Hash()
+
+		if blockchain.HashToBig(hash).Cmp(miner.target) <= 0 {
+			return true
+		}
 	}
 
-	log.Info("Miner is running.")
+	return false
 }
 
 func (miner *Miner) generateBlock() {
-	miner.Lock.Lock()
-
 	miner.block = network.NewBlockMessage()
 
 	miner.block.Header = &network.BlockHeader{
@@ -70,59 +132,23 @@ func (miner *Miner) generateBlock() {
 
 	miner.block.Txs = append(miner.block.Txs, newCoinbaseTx(blockchain.NewBlockFromBlockMessage(miner.block).CalcBlockSubsidy()))
 
-	miner.block.Header.HashMerkleRoot = blockchain.ComputeMerkleRoot([]*utils.Hash{miner.block.Txs[0].Hash()})
+	miner.block.Txs[0].Flags[0] = strconv.Itoa(int(miner.block.Header.Height))
 
-	miner.Lock.Unlock()
-}
-
-func (miner *Miner) solve() {
-	miner.solving = true
-
-	log.WithFields(log.Fields{
-		"target": fmt.Sprintf("%x", miner.target),
-	}).Info("Miner is solving.")
-
-	for miner.block.Header.Nonce < math.MaxUint64 {
-		select {
-		case <-miner.quit:
-			return
-		default:
-			miner.Lock.Lock()
-			miner.block.Header.Nonce += 1
-
-			hash := miner.block.Header.Hash()
-
-			if blockchain.HashToBig(hash).Cmp(miner.target) <= 0 {
-				log.Info("Miner found a valid hash.")
-
-				miner.solving = false
-				log.Info("Miner is no more solving.")
-
-				miner.Lock.Unlock()
-				miner.Config.ProcessBlock(miner.block)
-
-				return
-			}
-			miner.Lock.Unlock()
-		}
+	for _, tx := range miner.Mempool.FetchTxs() {
+		miner.block.Txs = append(miner.block.Txs, tx.Msg)
 	}
 
-	miner.solving = false
-	log.Info("Miner is no more solving.")
+	var hashes []*utils.Hash
 
+	for _, tx := range miner.block.Txs {
+		hashes = append(hashes, tx.Hash())
+	}
+
+	miner.block.Header.HashMerkleRoot = blockchain.ComputeMerkleRoot(hashes)
 }
 
-func (miner *Miner) UpdatePrevBlock(block *blockchain.Block) {
-	miner.Lock.Lock()
+func (miner *Miner) UpdateBestBlock(block *blockchain.Block) {
 	miner.BestBlock = block
-	miner.target = blockchain.BitsToBig(block.Msg.Header.Bits)
-	miner.Lock.Unlock()
-
-	miner.generateBlock()
-
-	if !miner.solving {
-		go miner.solve()
-	}
 }
 
 func (miner *Miner) Stop() {

@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"math/big"
+	"strconv"
 	"sync"
 )
 
@@ -24,11 +25,17 @@ type Blockchain struct {
 	orphansLock       sync.Mutex
 	orphans           map[*utils.Hash]*Block
 	prevHashToOrphans map[*utils.Hash][]*utils.Hash
+
+	PoppedBlocks chan *Block
+	PushedBlocks chan *Block
 }
 
 func NewBlockchain() *Blockchain {
 	blockchain := &Blockchain{
 		GenesisBlock: &genesisBlock,
+
+		PoppedBlocks: make(chan *Block),
+		PushedBlocks: make(chan *Block),
 	}
 
 	blockchain.Index = NewBlockIndex(blockchain)
@@ -125,7 +132,7 @@ func (blockchain *Blockchain) FetchUtxos(tx *Tx) (*Utxos, []*network.Outpoint, e
 				continue
 			}
 
-			var utxo *UtxoEntry
+			utxo := new(UtxoEntry)
 			err = utxo.UnmarshalBinary(utxoBytes)
 			if err != nil {
 				return err
@@ -283,6 +290,8 @@ func (blockchain *Blockchain) CalcNextBlockDifficulty(block *BlockIndexEntry, ne
 }
 
 func (blockchain *Blockchain) ValidateBlock(block *Block) (error, error) {
+	log.Debug("validating a block")
+
 	parentBlock, err := blockchain.Index.FindBlock(block.Msg.Header.HashPrevBlock)
 	if parentBlock.height+1 != block.Msg.Header.Height {
 		return errors.New("height is not equal to the previous block height + 1"), nil
@@ -294,6 +303,10 @@ func (blockchain *Blockchain) ValidateBlock(block *Block) (error, error) {
 	}
 	if block.Msg.Header.Bits != nextBits {
 		return errors.New("the difficulty is invalid"), nil
+	}
+
+	if block.Txs[0].Msg.Flags[0] != strconv.Itoa(int(block.Msg.Header.Height)) {
+		return errors.New("the first flag of the coinbase is not the block height"), nil
 	}
 
 	var totalFees uint64
@@ -527,11 +540,13 @@ func (blockchain *Blockchain) PushBlock(block *Block) error {
 		for _, input := range tx.Msg.Inputs {
 			removedEntry := utxos.RemoveEntry(input.PreviousOutput)
 			stxoj = append(stxoj, removedEntry)
+
+			log.WithField("entry", removedEntry).Debug("removed utxo entry")
 		}
 
 		for index, output := range tx.Msg.Outputs {
 			utxos.AddEntry(&network.Outpoint{
-				Hash:  tx.Hash(),
+				Hash:  *tx.Hash(),
 				Index: uint32(index),
 			}, &UtxoEntry{
 				amount:      output.Value,
@@ -572,6 +587,8 @@ func (blockchain *Blockchain) PushBlock(block *Block) error {
 		return err
 	}
 
+	blockchain.PushedBlocks <- block
+
 	return nil
 }
 
@@ -600,7 +617,7 @@ func (blockchain *Blockchain) PopBlock(block *Block) error {
 	for _, tx := range block.Txs {
 		for index := range tx.Msg.Outputs {
 			utxos.RemoveEntry(&network.Outpoint{
-				Hash:  tx.Hash(),
+				Hash:  *tx.Hash(),
 				Index: uint32(index),
 			})
 		}
@@ -627,6 +644,8 @@ func (blockchain *Blockchain) PopBlock(block *Block) error {
 
 	blockchain.RemoveFollowing(block.Msg.Header.HashPrevBlock)
 	blockchain.StoreLongestChain(block.Msg.Header.HashPrevBlock)
+
+	blockchain.PoppedBlocks <- block
 
 	return nil
 }

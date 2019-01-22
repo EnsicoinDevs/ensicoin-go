@@ -114,17 +114,17 @@ func (entry *UtxoEntry) IsCoinBase() bool {
 }
 
 type Utxos struct {
-	entries map[*network.Outpoint]*UtxoEntry
+	entries map[network.Outpoint]*UtxoEntry
 }
 
 func newUtxos() *Utxos {
 	return &Utxos{
-		entries: make(map[*network.Outpoint]*UtxoEntry),
+		entries: make(map[network.Outpoint]*UtxoEntry),
 	}
 }
 
 func (utxos *Utxos) AddEntry(outpoint *network.Outpoint, entry *UtxoEntry) {
-	utxos.entries[outpoint] = entry
+	utxos.entries[*outpoint] = entry
 }
 
 func (utxos *Utxos) AddEntryWithTx(outpoint *network.Outpoint, tx *Tx, blockHeight uint32) {
@@ -139,13 +139,13 @@ func (utxos *Utxos) AddEntryWithTx(outpoint *network.Outpoint, tx *Tx, blockHeig
 }
 
 func (utxos *Utxos) FindEntry(outpoint *network.Outpoint) *UtxoEntry {
-	return utxos.entries[outpoint]
+	return utxos.entries[*outpoint]
 }
 
 func (utxos *Utxos) RemoveEntry(outpoint *network.Outpoint) *UtxoEntry {
 	entry := utxos.FindEntry(outpoint)
 
-	delete(utxos.entries, outpoint)
+	delete(utxos.entries, *outpoint)
 
 	return entry
 }

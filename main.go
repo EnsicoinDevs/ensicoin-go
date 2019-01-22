@@ -52,6 +52,7 @@ func main() {
 		Config:     &miner.Config{},
 		BestBlock:  bestBlock,
 		Blockchain: blockchain,
+		Mempool:    mempool,
 	}
 
 	server := NewServer(blockchain, mempool, miner)
@@ -68,7 +69,7 @@ func main() {
 		miner.Start()
 	}
 
-	rpcServer := newRpcServer(blockchain)
+	rpcServer := newRpcServer(blockchain, server)
 
 	go rpcServer.Start()
 

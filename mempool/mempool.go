@@ -17,48 +17,76 @@ type Config struct {
 type Mempool struct {
 	config Config
 
-	txs              map[*utils.Hash]*blockchain.Tx
-	orphans          map[*utils.Hash]*blockchain.Tx
-	outpoints        map[*network.Outpoint]*blockchain.Tx
-	orphansOutpoints map[*network.Outpoint]*blockchain.Tx
-	mutex            sync.RWMutex
+	mutex *sync.RWMutex
+
+	txs              map[utils.Hash]*blockchain.Tx
+	orphans          map[utils.Hash]*blockchain.Tx
+	outpoints        map[network.Outpoint]*blockchain.Tx
+	orphansOutpoints map[network.Outpoint]*blockchain.Tx
 }
 
 func NewMempool(config *Config) *Mempool {
 	return &Mempool{
 		config: *config,
 
-		txs:              make(map[*utils.Hash]*blockchain.Tx),
-		orphans:          make(map[*utils.Hash]*blockchain.Tx),
-		outpoints:        make(map[*network.Outpoint]*blockchain.Tx),
-		orphansOutpoints: make(map[*network.Outpoint]*blockchain.Tx),
+		mutex: &sync.RWMutex{},
+
+		txs:              make(map[utils.Hash]*blockchain.Tx),
+		orphans:          make(map[utils.Hash]*blockchain.Tx),
+		outpoints:        make(map[network.Outpoint]*blockchain.Tx),
+		orphansOutpoints: make(map[network.Outpoint]*blockchain.Tx),
 	}
 }
 
+func (mempool *Mempool) FetchTxs() []*blockchain.Tx {
+	mempool.mutex.RLock()
+	defer mempool.mutex.RUnlock()
+
+	var txs []*blockchain.Tx
+
+	for _, tx := range mempool.txs {
+		txs = append(txs, tx)
+	}
+
+	return txs
+}
+
 func (mempool *Mempool) addTx(tx *blockchain.Tx) {
-	mempool.txs[tx.Hash()] = tx
+	mempool.txs[*tx.Hash()] = tx
 
 	for _, input := range tx.Msg.Inputs {
-		mempool.outpoints[input.PreviousOutput] = tx
+		mempool.outpoints[*input.PreviousOutput] = tx
 	}
 
 	log.WithField("tx", tx.Hash).Debug("accepted transaction")
 }
 
+func (mempool *Mempool) removeTx(tx *blockchain.Tx) {
+	for _, input := range tx.Msg.Inputs {
+		delete(mempool.outpoints, *input.PreviousOutput)
+	}
+
+	delete(mempool.txs, *tx.Hash())
+
+	// TODO: (important) recursively remove
+
+	log.WithField("tx", tx.Hash).Debug("removed transaction")
+}
+
 func (mempool *Mempool) addOrphan(tx *blockchain.Tx) {
-	mempool.orphans[tx.Hash()] = tx
+	mempool.orphans[*tx.Hash()] = tx
 
 	for _, input := range tx.Msg.Inputs {
-		mempool.orphansOutpoints[input.PreviousOutput] = tx
+		mempool.orphansOutpoints[*input.PreviousOutput] = tx
 	}
 
 	log.WithField("tx", tx.Hash).Debug("accepted orphan transaction")
 }
 
 func (mempool *Mempool) findTxByHash(hash *utils.Hash) *blockchain.Tx {
-	tx := mempool.txs[hash]
+	tx := mempool.txs[*hash]
 	if tx == nil {
-		tx = mempool.orphans[hash]
+		tx = mempool.orphans[*hash]
 	}
 
 	return tx
@@ -73,7 +101,7 @@ func (mempool *Mempool) fetchUtxos(tx *blockchain.Tx) (*blockchain.Utxos, []*net
 	var missingsAfter []*network.Outpoint
 
 	for _, missingOutpoint := range missings {
-		spentTx := mempool.outpoints[missingOutpoint]
+		spentTx := mempool.outpoints[*missingOutpoint]
 		if spentTx == nil {
 			missingsAfter = append(missingsAfter, missingOutpoint)
 		} else {
@@ -104,7 +132,7 @@ func (mempool *Mempool) validateTx(tx *blockchain.Tx) (bool, []*utils.Hash) {
 	if len(missings) != 0 {
 		encountered := make(map[*utils.Hash]bool)
 		for _, outpoint := range missings {
-			encountered[outpoint.Hash] = true
+			encountered[&outpoint.Hash] = true
 		}
 
 		var missingParents []*utils.Hash
@@ -132,7 +160,7 @@ func (mempool *Mempool) validateTx(tx *blockchain.Tx) (bool, []*utils.Hash) {
 
 func (mempool *Mempool) processOrphans(tx *blockchain.Tx) []*utils.Hash {
 	outpoint := &network.Outpoint{
-		Hash: tx.Hash(),
+		Hash: *tx.Hash(),
 	}
 
 	var acceptedTxs []*utils.Hash
@@ -140,7 +168,7 @@ func (mempool *Mempool) processOrphans(tx *blockchain.Tx) []*utils.Hash {
 	for outputId := range tx.Msg.Outputs {
 		outpoint.Index = uint32(outputId)
 
-		orphan, exists := mempool.orphansOutpoints[outpoint]
+		orphan, exists := mempool.orphansOutpoints[*outpoint]
 		if exists {
 			valid, missingParents := mempool.validateTx(orphan)
 			if !valid {
@@ -198,6 +226,13 @@ func (mempool *Mempool) ProcessTx(tx *blockchain.Tx) []*utils.Hash {
 	return mempool.processTx(tx)
 }
 
+func (mempool *Mempool) RemoveTx(tx *blockchain.Tx) {
+	mempool.mutex.Lock()
+	defer mempool.mutex.Unlock()
+
+	mempool.removeTx(tx)
+}
+
 func (mempool *Mempool) FindTxByHash(hash *utils.Hash) *blockchain.Tx {
 	mempool.mutex.RLock()
 	defer mempool.mutex.RUnlock()
@@ -206,28 +241,28 @@ func (mempool *Mempool) FindTxByHash(hash *utils.Hash) *blockchain.Tx {
 }
 
 func (mempool *Mempool) removeOrphan(tx *blockchain.Tx, recursively bool) {
-	_, exists := mempool.orphans[tx.Hash()]
+	_, exists := mempool.orphans[*tx.Hash()]
 	if !exists {
 		return
 	}
 
 	for _, input := range tx.Msg.Inputs {
-		delete(mempool.orphansOutpoints, input.PreviousOutput)
+		delete(mempool.orphansOutpoints, *input.PreviousOutput)
 	}
 
 	if recursively {
 		outpoint := &network.Outpoint{
-			Hash: tx.Hash(),
+			Hash: *tx.Hash(),
 		}
 
 		for outputId := range tx.Msg.Outputs {
 			outpoint.Index = uint32(outputId)
-			orphan, exists := mempool.orphansOutpoints[outpoint]
+			orphan, exists := mempool.orphansOutpoints[*outpoint]
 			if exists {
 				mempool.removeOrphan(orphan, true)
 			}
 		}
 	}
 
-	delete(mempool.orphans, tx.Hash())
+	delete(mempool.orphans, *tx.Hash())
 }

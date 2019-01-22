@@ -9,14 +9,14 @@ import (
 )
 
 type Outpoint struct {
-	Hash  *utils.Hash
+	Hash  utils.Hash
 	Index uint32
 }
 
 func (outpoint *Outpoint) MarshalBinary() ([]byte, error) {
 	buf := bytes.NewBuffer(make([]byte, 0, 36))
 
-	err := WriteHash(buf, outpoint.Hash)
+	err := WriteHash(buf, &outpoint.Hash)
 	if err != nil {
 		return nil, err
 	}
@@ -32,11 +32,12 @@ func (outpoint *Outpoint) MarshalBinary() ([]byte, error) {
 func (outpoint *Outpoint) UnmarshalBinary(data []byte) error {
 	buf := bytes.NewBuffer(data)
 
-	var err error
-	outpoint.Hash, err = ReadHash(buf)
+	hashPtr, err := ReadHash(buf)
 	if err != nil {
 		return err
 	}
+
+	outpoint.Hash = *hashPtr
 
 	outpoint.Index, err = ReadUint32(buf)
 	return err
@@ -54,13 +55,13 @@ func readOutpoint(reader io.Reader) (*Outpoint, error) {
 	}
 
 	return &Outpoint{
-		Hash:  hash,
+		Hash:  *hash,
 		Index: index,
 	}, nil
 }
 
 func writeOutpoint(writer io.Writer, outpoint *Outpoint) error {
-	err := WriteHash(writer, outpoint.Hash)
+	err := WriteHash(writer, &outpoint.Hash)
 	if err != nil {
 		return err
 	}

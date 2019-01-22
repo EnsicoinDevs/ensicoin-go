@@ -7,6 +7,7 @@ import (
 	"github.com/EnsicoinDevs/ensicoincoin/miner"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
 	"github.com/EnsicoinDevs/ensicoincoin/peer"
+	"github.com/EnsicoinDevs/ensicoincoin/sync"
 	"github.com/EnsicoinDevs/ensicoincoin/utils"
 	log "github.com/sirupsen/logrus"
 	"net"
@@ -67,6 +68,7 @@ type Server struct {
 	blockchain *blockchain.Blockchain
 	mempool    *mempool.Mempool
 	miner      *miner.Miner
+	sync       *sync.Synchronizer
 
 	invs chan *invWithPeer
 
@@ -81,6 +83,7 @@ func NewServer(blockchain *blockchain.Blockchain, mempool *mempool.Mempool, mine
 		blockchain: blockchain,
 		mempool:    mempool,
 		miner:      miner,
+		sync:       sync.NewSynchronizer(blockchain, mempool),
 
 		invs: make(chan *invWithPeer),
 	}
@@ -108,6 +111,8 @@ func (server *Server) syncWith(peer *ServerPeer) {
 }
 
 func (server *Server) Start() {
+	server.sync.Start()
+
 	var err error
 	server.listener, err = net.Listen("tcp", fmt.Sprintf(":%d", peerPort))
 	if err != nil {
@@ -223,16 +228,15 @@ func (peer *ServerPeer) onInv(message *network.InvMessage) {
 }
 
 func (server *Server) ProcessBlock(message *network.BlockMessage) {
-	valid, err := server.blockchain.ProcessBlock(blockchain.NewBlockFromBlockMessage(message))
-	if err != nil {
-		log.WithError(err).WithField("block", message).Error("error processing a block")
-	}
-	if valid != nil {
-		log.WithField("block", message).WithField("error", valid).Info("a block is invalid")
-		return
-	}
+	server.sync.ProcessBlock(message)
+}
 
-	log.WithField("block", message).Info("a block is valid")
+func (server *Server) ProcessTx(message *network.TxMessage) {
+	tx := blockchain.NewTxFromTxMessage(message)
+	acceptedTxs := server.mempool.ProcessTx(tx)
+	if len(acceptedTxs) > 0 {
+		server.broadcastTxs(acceptedTxs)
+	}
 }
 
 func (peer *ServerPeer) onBlock(message *network.BlockMessage) {
@@ -275,7 +279,7 @@ func (server *Server) broadcastBlock(block *network.BlockMessage, sourcePeer *Se
 	}
 }
 
-func (server *Server) broadcastTxs(txHashes []*utils.Hash, sourcePeer *ServerPeer) {
+func (server *Server) broadcastTxs(txHashes []*utils.Hash) {
 	var inventory []*network.InvVect
 
 	for _, hash := range txHashes {
@@ -295,11 +299,7 @@ func (server *Server) broadcastTxs(txHashes []*utils.Hash, sourcePeer *ServerPee
 }
 
 func (peer *ServerPeer) onTx(message *network.TxMessage) {
-	tx := blockchain.NewTxFromTxMessage(message)
-	acceptedTxs := peer.server.mempool.ProcessTx(tx)
-	if len(acceptedTxs) > 0 {
-		peer.server.broadcastTxs(acceptedTxs, peer)
-	}
+	peer.server.ProcessTx(message)
 }
 
 func (peer *ServerPeer) onGetData(message *network.GetDataMessage) {
@@ -379,6 +379,6 @@ func (server *Server) ProcessMinerBlock(block *network.BlockMessage) {
 	}
 
 	if suchBlock.Hash().IsEqual(block.Header.Hash()) {
-		server.miner.UpdatePrevBlock(suchBlock)
+		server.miner.UpdateBestBlock(suchBlock)
 	}
 }

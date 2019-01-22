@@ -3,6 +3,7 @@ package blockchain
 import (
 	"crypto/sha256"
 	"github.com/EnsicoinDevs/ensicoincoin/utils"
+	log "github.com/sirupsen/logrus"
 )
 
 func ComputeMerkleRoot(hashes []*utils.Hash) *utils.Hash {
@@ -12,20 +13,23 @@ func ComputeMerkleRoot(hashes []*utils.Hash) *utils.Hash {
 	} // TODO: delete
 
 	for len(hashes) > 1 {
+		log.WithField("len(hashes)", len(hashes)).Debug("next iteration")
+
 		if len(hashes)%2 != 0 {
+			log.Debug("\tduplicating the last hash")
 			hashes = append(hashes, hashes[len(hashes)-1])
 		}
 
 		var leftHash *utils.Hash
 		for i, hash := range hashes {
 			if i%2 != 0 {
-				hashes[(i+1)/2] = DoubleHash(leftHash, hash)
+				hashes[((i+1)/2)-1] = DoubleHash(leftHash, hash)
 			} else {
 				leftHash = hash
 			}
 		}
 
-		hashes = hashes[:(len(hashes)/2)-1]
+		hashes = hashes[:len(hashes)/2]
 	}
 
 	return hashes[0]

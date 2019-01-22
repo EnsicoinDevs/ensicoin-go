@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
 	"github.com/EnsicoinDevs/ensicoincoin/blockchain"
+	"github.com/EnsicoinDevs/ensicoincoin/network"
 	pb "github.com/EnsicoinDevs/ensicoincoin/rpc"
 	"github.com/EnsicoinDevs/ensicoincoin/utils"
 	"golang.org/x/net/context"
@@ -13,11 +15,13 @@ import (
 
 type rpcServer struct {
 	blockchain *blockchain.Blockchain
+	server     *Server
 }
 
-func newRpcServer(blockchain *blockchain.Blockchain) *rpcServer {
+func newRpcServer(blockchain *blockchain.Blockchain, server *Server) *rpcServer {
 	return &rpcServer{
 		blockchain: blockchain,
+		server:     server,
 	}
 }
 
@@ -30,6 +34,7 @@ func (s *rpcServer) Start() error {
 	grpcServer := grpc.NewServer()
 
 	pb.RegisterBlockchainServer(grpcServer, s)
+	pb.RegisterTxsServer(grpcServer, s)
 
 	if err := grpcServer.Serve(listener); err != nil {
 		return err
@@ -109,4 +114,17 @@ func (s *rpcServer) GetBestBlockHash(ctx context.Context, in *pb.GetBestBlockHas
 	return &pb.GetBestBlockHashReply{
 		Hash: hex.EncodeToString(block.Hash()[:]),
 	}, nil
+}
+
+func (s *rpcServer) PublishTx(ctx context.Context, in *pb.PublishTxRequest) (*pb.PublishTxReply, error) {
+	tx := network.NewTxMessage()
+	buf := bytes.NewBuffer(in.GetTx())
+	err := tx.Decode(buf)
+	if err != nil {
+		return nil, err
+	}
+
+	s.server.ProcessTx(tx)
+
+	return &pb.PublishTxReply{}, nil
 }
