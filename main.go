@@ -70,7 +70,7 @@ func main() {
 
 	server := NewServer(blockchain, mempool, miner)
 
-	miner.Config.ProcessBlock = server.ProcessMinerBlock
+	miner.Config.ProcessBlock = server.ProcessBlock
 
 	go server.Start()
 

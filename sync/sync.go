@@ -3,6 +3,7 @@ package sync
 import (
 	"github.com/EnsicoinDevs/ensicoincoin/blockchain"
 	"github.com/EnsicoinDevs/ensicoincoin/mempool"
+	"github.com/EnsicoinDevs/ensicoincoin/miner"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
 	"github.com/EnsicoinDevs/ensicoincoin/peer"
 	log "github.com/sirupsen/logrus"
@@ -12,15 +13,17 @@ type Synchronizer struct {
 	Blockchain   *blockchain.Blockchain
 	Mempool      *mempool.Mempool
 	PeersManager *peer.PeersManager
+	Miner        *miner.Miner
 
 	quit chan struct{}
 }
 
-func NewSynchronizer(blockchain *blockchain.Blockchain, mempool *mempool.Mempool, peersManager *peer.PeersManager) *Synchronizer {
+func NewSynchronizer(blockchain *blockchain.Blockchain, mempool *mempool.Mempool, peersManager *peer.PeersManager, miner *miner.Miner) *Synchronizer {
 	return &Synchronizer{
 		Blockchain:   blockchain,
 		Mempool:      mempool,
 		PeersManager: peersManager,
+		Miner:        miner,
 
 		quit: make(chan struct{}),
 	}
@@ -65,10 +68,32 @@ func (sync *Synchronizer) handlePushedBlock(block *blockchain.Block) {
 	}
 
 	sync.PeersManager.Broadcast(block.Msg)
+	sync.updateMinerBestBlock()
 }
 
 func (sync *Synchronizer) handlePoppedBlock(block *blockchain.Block) {
 	for _, tx := range block.Txs {
 		sync.Mempool.ProcessTx(tx)
 	}
+
+	sync.updateMinerBestBlock()
+}
+
+func (sync *Synchronizer) updateMinerBestBlock() error {
+	bestBlock, err := sync.Blockchain.FindLongestChain()
+	if err != nil {
+		return err
+	}
+
+	if sync.Miner.BestBlock == nil {
+		sync.Miner.UpdateBestBlock(bestBlock)
+		return nil
+	}
+
+	if !sync.Miner.BestBlock.Hash().IsEqual(bestBlock.Hash()) {
+		sync.Miner.UpdateBestBlock(bestBlock)
+		return nil
+	}
+
+	return nil
 }

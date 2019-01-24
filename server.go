@@ -92,7 +92,7 @@ func NewServer(blockchain *blockchain.Blockchain, mempool *mempool.Mempool, mine
 		peersManager: peer.NewPeersManager(),
 	}
 
-	server.sync = sync.NewSynchronizer(server.blockchain, server.mempool, server.peersManager)
+	server.sync = sync.NewSynchronizer(server.blockchain, server.mempool, server.peersManager, server.miner)
 
 	return server
 }
@@ -369,17 +369,4 @@ func (peer *ServerPeer) onGetBlocks(message *network.GetBlocksMessage) {
 	peer.Send(&network.InvMessage{
 		Inventory: inventory,
 	})
-}
-
-func (server *Server) ProcessMinerBlock(block *network.BlockMessage) {
-	server.ProcessBlock(block)
-
-	suchBlock, err := server.blockchain.FindLongestChain()
-	if err != nil {
-		log.WithError(err).Error("error finding such a block")
-	}
-
-	if suchBlock.Hash().IsEqual(block.Header.Hash()) {
-		server.miner.UpdateBestBlock(suchBlock)
-	}
 }
