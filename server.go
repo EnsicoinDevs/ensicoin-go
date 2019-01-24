@@ -74,8 +74,9 @@ type Server struct {
 
 	invs chan *invWithPeer
 
-	peers    []*ServerPeer
-	listener net.Listener
+	peers        []*ServerPeer
+	peersManager *peer.PeersManager
+	listener     net.Listener
 
 	synced bool
 }
@@ -85,16 +86,20 @@ func NewServer(blockchain *blockchain.Blockchain, mempool *mempool.Mempool, mine
 		blockchain: blockchain,
 		mempool:    mempool,
 		miner:      miner,
-		sync:       sync.NewSynchronizer(blockchain, mempool),
 
 		invs: make(chan *invWithPeer),
+
+		peersManager: peer.NewPeersManager(),
 	}
+
+	server.sync = sync.NewSynchronizer(server.blockchain, server.mempool, server.peersManager)
 
 	return server
 }
 
 func (server *Server) registerPeer(peer *ServerPeer) {
 	server.peers = append(server.peers, peer)
+	server.peersManager.Add(peer.Peer)
 }
 
 func (server *Server) syncWith(peer *ServerPeer) {

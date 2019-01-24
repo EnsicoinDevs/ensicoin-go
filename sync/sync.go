@@ -4,20 +4,23 @@ import (
 	"github.com/EnsicoinDevs/ensicoincoin/blockchain"
 	"github.com/EnsicoinDevs/ensicoincoin/mempool"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
+	"github.com/EnsicoinDevs/ensicoincoin/peer"
 	log "github.com/sirupsen/logrus"
 )
 
 type Synchronizer struct {
-	Blockchain *blockchain.Blockchain
-	Mempool    *mempool.Mempool
+	Blockchain   *blockchain.Blockchain
+	Mempool      *mempool.Mempool
+	PeersManager *peer.PeersManager
 
 	quit chan struct{}
 }
 
-func NewSynchronizer(blockchain *blockchain.Blockchain, mempool *mempool.Mempool) *Synchronizer {
+func NewSynchronizer(blockchain *blockchain.Blockchain, mempool *mempool.Mempool, peersManager *peer.PeersManager) *Synchronizer {
 	return &Synchronizer{
-		Blockchain: blockchain,
-		Mempool:    mempool,
+		Blockchain:   blockchain,
+		Mempool:      mempool,
+		PeersManager: peersManager,
 
 		quit: make(chan struct{}),
 	}
@@ -60,6 +63,8 @@ func (sync *Synchronizer) handlePushedBlock(block *blockchain.Block) {
 	for _, tx := range block.Txs {
 		sync.Mempool.RemoveTx(tx)
 	}
+
+	sync.PeersManager.Broadcast(block.Msg)
 }
 
 func (sync *Synchronizer) handlePoppedBlock(block *blockchain.Block) {
