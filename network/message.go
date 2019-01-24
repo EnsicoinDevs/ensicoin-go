@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"github.com/EnsicoinDevs/ensicoincoin/consensus"
+	log "github.com/sirupsen/logrus"
 	"io"
 )
 
@@ -98,6 +99,8 @@ func ReadMessage(reader io.Reader) (Message, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	log.Info("pif paf pouf")
 
 	if header.magic != consensus.NETWORK_MAGIC_NUMBER {
 		return nil, errors.New("bad magic number")

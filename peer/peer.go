@@ -71,6 +71,7 @@ func (peer *Peer) run() {
 		message, err = network.ReadMessage(peer.conn)
 		if err != nil {
 			log.WithError(err).Error("error reading a message")
+			peer.conn.Close() // TODO: fixme
 			return
 		}
 

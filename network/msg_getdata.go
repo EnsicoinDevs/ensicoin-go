@@ -1,6 +1,7 @@
 package network
 
 import (
+	"fmt"
 	"io"
 )
 
@@ -51,5 +52,5 @@ func (msg *GetDataMessage) MsgType() string {
 }
 
 func (msg GetDataMessage) String() string {
-	return "GetDataMessage[]"
+	return fmt.Sprintf("GetDataMessage[Inventory: %v]", msg.Inventory)
 }

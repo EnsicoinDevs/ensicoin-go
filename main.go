@@ -6,6 +6,8 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"net"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"strings"
 
@@ -20,6 +22,7 @@ var (
 	discordToken    string
 	interactiveMode bool
 	mining          bool
+	epprof          bool
 )
 
 func init() {
@@ -27,14 +30,24 @@ func init() {
 	flag.StringVar(&discordToken, "token", "", "A discord token.")
 	flag.BoolVar(&interactiveMode, "i", false, "Interactive mode.")
 	flag.BoolVar(&mining, "mining", false, "Miner mode.")
+	flag.BoolVar(&epprof, "pprof", false, "Enable pprof")
 }
 
 func main() {
 	log.SetLevel(log.DebugLevel)
 
-	log.Info("ENSICOINCOIN is starting")
-
 	flag.Parse()
+
+	if epprof {
+		log.Debug("?")
+
+		go func() {
+			log.Debug("pprof")
+			log.Debug(http.ListenAndServe("localhost:6060", nil))
+		}()
+	}
+
+	log.Info("ENSICOINCOIN is starting")
 
 	blockchain := blockchain.NewBlockchain()
 	blockchain.Load()

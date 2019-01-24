@@ -34,7 +34,7 @@ func NewBlockIndex(blockchain *Blockchain) *BlockIndex {
 	}
 }
 
-func (index *BlockIndex) FindBlock(hash *utils.Hash) (*BlockIndexEntry, error) {
+func (index *BlockIndex) findBlock(hash *utils.Hash) (*BlockIndexEntry, error) {
 	index.mutex.RLock()
 	entry, exist := index.index[hash]
 	index.mutex.RUnlock()
@@ -42,7 +42,7 @@ func (index *BlockIndex) FindBlock(hash *utils.Hash) (*BlockIndexEntry, error) {
 		return entry, nil
 	}
 
-	block, err := index.blockchain.FindBlockByHash(hash)
+	block, err := index.blockchain.findBlockByHash(hash)
 	if err != nil {
 		return nil, err
 	}
@@ -62,6 +62,13 @@ func (index *BlockIndex) FindBlock(hash *utils.Hash) (*BlockIndexEntry, error) {
 	index.addEntry(entry)
 
 	return entry, nil
+}
+
+func (index *BlockIndex) FindBlock(hash *utils.Hash) (*BlockIndexEntry, error) {
+	index.blockchain.lock.RLock()
+	defer index.blockchain.lock.RUnlock()
+
+	return index.findBlock(hash)
 }
 
 func (index *BlockIndex) addEntry(entry *BlockIndexEntry) {
@@ -97,7 +104,7 @@ func (index *BlockIndex) findAncestor(block *Block, height uint32) (*BlockIndexE
 	entry.hashPrevBlock = block.Msg.Header.HashPrevBlock
 
 	for entry.height != height {
-		entry, err = index.FindBlock(entry.hashPrevBlock)
+		entry, err = index.findBlock(entry.hashPrevBlock)
 		if err != nil {
 			return nil, err
 		}

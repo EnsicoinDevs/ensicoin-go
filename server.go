@@ -39,7 +39,9 @@ func (sp *ServerPeer) newConfig() *peer.Config {
 			OnWhoamiAck: sp.onWhoamiAck,
 			OnInv:       sp.onInv,
 			OnGetBlocks: sp.onGetBlocks,
+			OnGetData:   sp.onGetData,
 			OnTx:        sp.onTx,
+			OnBlock:     sp.onBlock,
 		},
 	}
 }
@@ -240,17 +242,7 @@ func (server *Server) ProcessTx(message *network.TxMessage) {
 }
 
 func (peer *ServerPeer) onBlock(message *network.BlockMessage) {
-	valid, err := peer.server.blockchain.ProcessBlock(blockchain.NewBlockFromBlockMessage(message))
-	if err != nil {
-		log.WithError(err).WithField("block", message).Error("error processing a block")
-	}
-	if valid != nil {
-		log.WithField("block", message).WithField("error", valid).Info("a block is invalid")
-		return
-	}
-
-	log.WithField("block", message).Info("a block is a valid, broadcasting")
-	peer.server.broadcastBlock(message, peer)
+	peer.server.sync.ProcessBlock(message)
 }
 
 func (server *Server) broadcastTx(tx *blockchain.Tx, sourcePeer *ServerPeer) {
@@ -317,7 +309,9 @@ func (peer *ServerPeer) onGetData(message *network.GetDataMessage) {
 				continue // TODO: send a NotFound message
 			}
 
-			peer.Send(&network.BlockMessage{})
+			peer.Send(block.Msg)
+
+			log.Info("block sent")
 		case network.INV_VECT_TX:
 
 		default:
@@ -359,6 +353,8 @@ func (peer *ServerPeer) onGetBlocks(message *network.GetBlocksMessage) {
 	}
 
 	for _, hash := range hashes {
+		log.WithField("hash", *hash).Debug("adding a hash")
+
 		inventory = append(inventory, &network.InvVect{
 			InvType: network.INV_VECT_BLOCK,
 			Hash:    hash,
