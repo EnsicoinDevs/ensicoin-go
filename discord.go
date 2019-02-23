@@ -4,6 +4,7 @@ import (
 	"github.com/EnsicoinDevs/ensicoincoin/consensus"
 	"github.com/bwmarrin/discordgo"
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 	"strconv"
 	"strings"
 )
@@ -13,7 +14,7 @@ var daddress string
 
 func startDiscordBootstraping(server *Server) {
 	var err error
-	dg, err = discordgo.New(discordToken)
+	dg, err = discordgo.New(viper.GetString("token"))
 	if err != nil {
 		log.WithError(err).Error("error creating Discord session")
 		return

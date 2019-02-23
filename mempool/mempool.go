@@ -57,8 +57,6 @@ func (mempool *Mempool) addTx(tx *blockchain.Tx) {
 	for _, input := range tx.Msg.Inputs {
 		mempool.outpoints[*input.PreviousOutput] = tx
 	}
-
-	log.WithField("tx", tx.Hash).Debug("accepted transaction")
 }
 
 func (mempool *Mempool) removeTx(tx *blockchain.Tx) {
@@ -69,8 +67,6 @@ func (mempool *Mempool) removeTx(tx *blockchain.Tx) {
 	delete(mempool.txs, *tx.Hash())
 
 	// TODO: (important) recursively remove
-
-	log.WithField("tx", tx.Hash).Debug("removed transaction")
 }
 
 func (mempool *Mempool) addOrphan(tx *blockchain.Tx) {
@@ -79,8 +75,6 @@ func (mempool *Mempool) addOrphan(tx *blockchain.Tx) {
 	for _, input := range tx.Msg.Inputs {
 		mempool.orphansOutpoints[*input.PreviousOutput] = tx
 	}
-
-	log.WithField("tx", tx.Hash).Debug("accepted orphan transaction")
 }
 
 func (mempool *Mempool) findTxByHash(hash *utils.Hash) *blockchain.Tx {
@@ -210,12 +204,15 @@ func (mempool *Mempool) processTx(tx *blockchain.Tx) []*utils.Hash {
 
 		acceptedTxs = append(acceptedTxs, tx.Hash())
 		mempool.addTx(tx)
+		log.Info("tx accepted")
 		acceptedTxs = append(acceptedTxs, mempool.processOrphans(tx)...)
 
 		return acceptedTxs
 	}
 
 	mempool.addOrphan(tx)
+	log.Info("orphan accepted")
+
 	return nil
 }
 

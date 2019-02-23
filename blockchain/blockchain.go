@@ -279,8 +279,6 @@ func (blockchain *Blockchain) findBlockHashesStartingAt(hash *utils.Hash) ([]*ut
 		b := tx.Bucket(followingBucket)
 
 		for {
-			log.WithField("hash", hex.EncodeToString(hash[:])).Debug(">")
-
 			hashBytes := b.Get(hash[:])
 			if hashBytes == nil {
 				break
@@ -339,8 +337,6 @@ func (blockchain *Blockchain) CalcNextBlockDifficulty(block *BlockIndexEntry, ne
 }
 
 func (blockchain *Blockchain) validateBlock(block *Block) (error, error) {
-	log.Debug("validating a block")
-
 	parentBlock, err := blockchain.Index.findBlock(block.Msg.Header.HashPrevBlock)
 	if parentBlock.height+1 != block.Msg.Header.Height {
 		return errors.New("height is not equal to the previous block height + 1"), nil
@@ -617,8 +613,6 @@ func (blockchain *Blockchain) pushBlock(block *Block) error {
 		for _, input := range tx.Msg.Inputs {
 			removedEntry := utxos.RemoveEntry(input.PreviousOutput)
 			stxoj = append(stxoj, removedEntry)
-
-			log.WithField("entry", removedEntry).Debug("removed utxo entry")
 		}
 
 		for index, output := range tx.Msg.Outputs {
@@ -823,8 +817,6 @@ func (blockchain *Blockchain) ProcessBlock(block *Block) (error, error) {
 	blockchain.lock.Lock()
 	defer blockchain.lock.Unlock()
 
-	log.Debug("processing a block")
-
 	entry, err := blockchain.Index.findBlock(block.Hash())
 	if err != nil {
 		return nil, err
@@ -850,7 +842,7 @@ func (blockchain *Blockchain) ProcessBlock(block *Block) (error, error) {
 		return nil, err
 	}
 	if entry == nil {
-		log.Info("block is an orphan")
+		log.WithField("blockHash", hex.EncodeToString(block.Msg.Header.Hash()[:])).Info("accepted orphan block")
 
 		blockchain.addOrphan(block)
 

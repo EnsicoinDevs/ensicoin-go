@@ -6,19 +6,20 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"net"
+	"time"
 )
 
 type PeerCallbacks struct {
-	OnReady      func()
-	OnWhoami     func(*network.WhoamiMessage)
-	OnWhoamiAck  func(*network.WhoamiAckMessage)
-	OnInv        func(*network.InvMessage)
-	OnGetData    func(*network.GetDataMessage)
-	OnNotFound   func(*network.NotFoundMessage)
-	OnBlock      func(*network.BlockMessage)
-	OnTx         func(*network.TxMessage)
-	OnGetBlocks  func(*network.GetBlocksMessage)
-	OnGetMempool func(*network.GetMempoolMessage)
+	OnReady      func(*Peer)
+	OnWhoami     func(*Peer, *network.WhoamiMessage)
+	OnWhoamiAck  func(*Peer, *network.WhoamiAckMessage)
+	OnInv        func(*Peer, *network.InvMessage)
+	OnGetData    func(*Peer, *network.GetDataMessage)
+	OnNotFound   func(*Peer, *network.NotFoundMessage)
+	OnBlock      func(*Peer, *network.BlockMessage)
+	OnTx         func(*Peer, *network.TxMessage)
+	OnGetBlocks  func(*Peer, *network.GetBlocksMessage)
+	OnGetMempool func(*Peer, *network.GetMempoolMessage)
 }
 
 type Config struct {
@@ -30,53 +31,150 @@ type Peer struct {
 
 	config  Config
 	ingoing bool
+
+	quit chan struct{}
 }
 
 func (peer Peer) String() string {
 	return fmt.Sprintf("Peer[addr=%s]", peer.conn.RemoteAddr().String())
 }
 
-func newPeer(config *Config, ingoing bool) *Peer {
+func NewPeer(conn net.Conn, config *Config, ingoing bool) *Peer {
 	return &Peer{
+		conn:    conn,
 		config:  *config,
 		ingoing: ingoing,
+		quit:    make(chan struct{}),
 	}
-}
-
-func NewIngoingPeer(config *Config) *Peer {
-	return newPeer(config, true)
-}
-
-func NewOutgoingPeer(config *Config) *Peer {
-	return newPeer(config, false)
 }
 
 func (peer *Peer) Ingoing() bool {
 	return peer.ingoing
 }
 
-func (peer *Peer) AttachConn(conn net.Conn) {
-	peer.conn = conn
-
-	go peer.run()
+func (peer *Peer) Outgoing() bool {
+	return !peer.ingoing
 }
 
-func (peer *Peer) run() {
-	peer.config.Callbacks.OnReady()
+func (peer *Peer) Start() error {
+	err := peer.negotiate()
+	if err != nil {
+		return err
+	}
 
-	var message network.Message
-	var err error
+	peer.config.Callbacks.OnReady(peer)
 
-	for {
-		message, err = network.ReadMessage(peer.conn)
+	go func() {
+		var message network.Message
+
+		for {
+			message, err = network.ReadMessage(peer.conn)
+			if err != nil {
+				log.WithError(err).Error("error reading a message")
+				peer.conn.Close() // TODO: fixme
+				return
+			}
+
+			go peer.handleMessage(message)
+		}
+	}()
+
+	return nil
+}
+
+func (peer *Peer) negotiate() error {
+	if peer.Outgoing() {
+		// > whoami
+		err := peer.Send(&network.WhoamiMessage{
+			Version: 0,
+			From: &network.Address{
+				Timestamp: time.Now(),
+				IP:        net.IPv4(0, 0, 0, 0),
+			},
+			Services: []string{"node"},
+		})
 		if err != nil {
-			log.WithError(err).Error("error reading a message")
-			peer.conn.Close() // TODO: fixme
-			return
+			return err
 		}
 
-		go peer.handleMessage(message)
+		// < whoami
+		message, err := network.ReadMessage(peer.conn)
+		if err != nil {
+			return err
+		}
+
+		whoami, ok := message.(*network.WhoamiMessage)
+		if !ok {
+			return errors.New("peer is insane")
+		}
+
+		_ = whoami
+
+		// < whomiack
+		message, err = network.ReadMessage(peer.conn)
+		if err != nil {
+			return err
+		}
+
+		whoamiack, ok := message.(*network.WhoamiAckMessage)
+		if !ok {
+			return errors.New("peer is insane")
+		}
+
+		_ = whoamiack
+
+		// > whoamiack
+		err = peer.Send(&network.WhoamiAckMessage{})
+		if err != nil {
+			return err
+		}
+	} else {
+		// < whoami
+		message, err := network.ReadMessage(peer.conn)
+		if err != nil {
+			return err
+		}
+
+		whoami, ok := message.(*network.WhoamiMessage)
+		if !ok {
+			return errors.New("peer is insane")
+		}
+
+		_ = whoami
+
+		// > whoami
+		err = peer.Send(&network.WhoamiMessage{
+			Version: 0,
+			From: &network.Address{
+				Timestamp: time.Now(),
+				IP:        net.IPv4(0, 0, 0, 0),
+			},
+			Services: []string{"node"},
+		})
+		if err != nil {
+			return err
+		}
+
+		// > whoamiack
+		err = peer.Send(&network.WhoamiAckMessage{})
+		if err != nil {
+			return err
+		}
+
+		// < whomiack
+		message, err = network.ReadMessage(peer.conn)
+		if err != nil {
+			return err
+		}
+
+		whoamiack, ok := message.(*network.WhoamiAckMessage)
+		if !ok {
+			return errors.New("peer is insane")
+		}
+
+		_ = whoamiack
 	}
+	return nil
 }
 
 func (peer *Peer) handleMessage(message network.Message) {
@@ -86,59 +184,47 @@ func (peer *Peer) handleMessage(message network.Message) {
 	}).Info("message received")
 
 	switch message.MsgType() {
-	case "whoami":
-		m := message.(*network.WhoamiMessage)
-
-		if peer.config.Callbacks.OnWhoami != nil {
-			peer.config.Callbacks.OnWhoami(m)
-		}
-	case "whoamiack":
-		m := message.(*network.WhoamiAckMessage)
-
-		if peer.config.Callbacks.OnWhoamiAck != nil {
-			peer.config.Callbacks.OnWhoamiAck(m)
-		}
 	case "inv":
 		m := message.(*network.InvMessage)
 
 		if peer.config.Callbacks.OnInv != nil {
-			peer.config.Callbacks.OnInv(m)
+			peer.config.Callbacks.OnInv(peer, m)
 		}
 	case "getdata":
 		m := message.(*network.GetDataMessage)
 
 		if peer.config.Callbacks.OnGetData != nil {
-			peer.config.Callbacks.OnGetData(m)
+			peer.config.Callbacks.OnGetData(peer, m)
 		}
 	case "notfound":
 		m := message.(*network.NotFoundMessage)
 
 		if peer.config.Callbacks.OnNotFound != nil {
-			peer.config.Callbacks.OnNotFound(m)
+			peer.config.Callbacks.OnNotFound(peer, m)
 		}
 	case "block":
 		m := message.(*network.BlockMessage)
 
 		if peer.config.Callbacks.OnBlock != nil {
-			peer.config.Callbacks.OnBlock(m)
+			peer.config.Callbacks.OnBlock(peer, m)
 		}
 	case "tx":
 		m := message.(*network.TxMessage)
 
 		if peer.config.Callbacks.OnTx != nil {
-			peer.config.Callbacks.OnTx(m)
+			peer.config.Callbacks.OnTx(peer, m)
 		}
 	case "getblocks":
 		m := message.(*network.GetBlocksMessage)
 
 		if peer.config.Callbacks.OnGetBlocks != nil {
-			peer.config.Callbacks.OnGetBlocks(m)
+			peer.config.Callbacks.OnGetBlocks(peer, m)
 		}
 	case "getmempool":
 		m := message.(*network.GetMempoolMessage)
 
 		if peer.config.Callbacks.OnGetMempool != nil {
-			peer.config.Callbacks.OnGetMempool(m)
+			peer.config.Callbacks.OnGetMempool(peer, m)
 		}
 	}
 }
