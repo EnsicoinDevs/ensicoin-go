@@ -9,6 +9,5 @@ before_install:
 install: true
 after_success:
 - sh .travis/deploy.sh
-script:
-- env GO111MODULE=on go build
-- env GO111MODULE=on go test
+env:
+- GO111MODULE=on
