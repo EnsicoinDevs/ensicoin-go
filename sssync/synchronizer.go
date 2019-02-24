@@ -7,24 +7,37 @@ import (
 	"github.com/EnsicoinDevs/ensicoincoin/miner"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
 	"github.com/EnsicoinDevs/ensicoincoin/peer"
+	"github.com/EnsicoinDevs/ensicoincoin/utils"
 	log "github.com/sirupsen/logrus"
+	"sync"
 )
 
+type Config struct {
+	Broadcast func(network.Message)
+}
+
 type Synchronizer struct {
+	config Config
+
 	Blockchain *blockchain.Blockchain
 	Mempool    *mempool.Mempool
 	Miner      *miner.Miner
 
+	mutex             *sync.Mutex
 	synchronizingPeer *peer.Peer
 
 	quit chan struct{}
 }
 
-func NewSynchronizer(blockchain *blockchain.Blockchain, mempool *mempool.Mempool, miner *miner.Miner) *Synchronizer {
+func NewSynchronizer(config *Config, blockchain *blockchain.Blockchain, mempool *mempool.Mempool, miner *miner.Miner) *Synchronizer {
 	return &Synchronizer{
+		config: *config,
+
 		Blockchain: blockchain,
 		Mempool:    mempool,
 		Miner:      miner,
+
+		mutex: &sync.Mutex{},
 
 		quit: make(chan struct{}),
 	}
@@ -37,9 +50,9 @@ func (sync *Synchronizer) Start() {
 			case <-sync.quit:
 				return
 			case block := <-sync.Blockchain.PushedBlocks:
-				sync.handlePushedBlock(block)
+				go sync.handlePushedBlock(block)
 			case block := <-sync.Blockchain.PoppedBlocks:
-				sync.handlePoppedBlock(block)
+				go sync.handlePoppedBlock(block)
 			}
 		}
 	}()
@@ -60,21 +73,16 @@ func (sync *Synchronizer) HandleBlockInvVect(peer *peer.Peer, invVect *network.I
 	}
 
 	if block == nil {
+		peer.Send(&network.GetDataMessage{
+			Inventory: []*network.InvVect{invVect},
+		})
 	}
 
 	return nil
 }
 
 func (sync *Synchronizer) HandleBlock(peer *peer.Peer, message *network.BlockMessage) {
-	sync.Blockchain.ProcessBlock(blockchain.NewBlockFromBlockMessage(message))
-}
-
-func (sync *Synchronizer) HandleReadyPeer(peer *peer.Peer) {
-
-}
-
-func (sync *Synchronizer) HandleDisconnectedPeer(peer *peer.Peer) {
-
+	sync.ProcessBlock(message)
 }
 
 func (sync *Synchronizer) ProcessBlock(message *network.BlockMessage) {
@@ -91,11 +99,52 @@ func (sync *Synchronizer) ProcessBlock(message *network.BlockMessage) {
 	log.WithField("blockHash", hex.EncodeToString(message.Header.Hash()[:])).Info("processed a valid block")
 }
 
+func (sync *Synchronizer) HandleReadyPeer(peer *peer.Peer) {
+	sync.mutex.Lock()
+	defer sync.mutex.Unlock()
+
+	if sync.synchronizingPeer == nil {
+		sync.synchronizingPeer = peer
+
+		sync.synchronize()
+	}
+}
+
+func (sync *Synchronizer) HandleDisconnectedPeer(peer *peer.Peer) {
+	sync.mutex.Lock()
+	defer sync.mutex.Unlock()
+
+	if sync.synchronizingPeer == peer {
+		sync.synchronizingPeer = nil
+	}
+}
+
+func (sync *Synchronizer) synchronize() {
+	longestChain, err := sync.Blockchain.FindLongestChain()
+	if err != nil {
+		log.WithError(err).Error("error finding the longest chain")
+		return
+	}
+
+	sync.synchronizingPeer.Send(&network.GetBlocksMessage{
+		BlockLocator: []*utils.Hash{longestChain.Hash()},
+		HashStop:     utils.NewHash(nil),
+	})
+}
+
 func (sync *Synchronizer) handlePushedBlock(block *blockchain.Block) {
 	for _, tx := range block.Txs {
 		sync.Mempool.RemoveTx(tx)
 	}
 
+	sync.config.Broadcast(&network.InvMessage{
+		Inventory: []*network.InvVect{
+			&network.InvVect{
+				InvType: network.INV_VECT_BLOCK,
+				Hash:    block.Hash(),
+			},
+		},
+	})
 	sync.updateMinerBestBlock()
 }
 

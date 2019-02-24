@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"fmt"
 	"github.com/EnsicoinDevs/ensicoincoin/blockchain"
 	"github.com/EnsicoinDevs/ensicoincoin/mempool"
@@ -23,7 +24,7 @@ type Server struct {
 
 	listener net.Listener
 
-	mutex sync.Mutex
+	mutex *sync.Mutex
 	peers []*peer.Peer
 }
 
@@ -32,9 +33,13 @@ func NewServer(blockchain *blockchain.Blockchain, mempool *mempool.Mempool, mine
 		blockchain: blockchain,
 		mempool:    mempool,
 		miner:      miner,
+
+		mutex: &sync.Mutex{},
 	}
 
-	server.synchronizer = sssync.NewSynchronizer(server.blockchain, server.mempool, server.miner)
+	server.synchronizer = sssync.NewSynchronizer(&sssync.Config{
+		Broadcast: server.Broadcast,
+	}, server.blockchain, server.mempool, server.miner)
 	server.miner.Config.ProcessBlock = server.synchronizer.ProcessBlock
 
 	return server
@@ -61,6 +66,7 @@ func (server *Server) Start() {
 					OnGetData:   server.onGetData,
 					OnGetBlocks: server.onGetBlocks,
 					OnInv:       server.onInv,
+					OnBlock:     server.onBlock,
 				},
 			}, true).Start()
 		}
@@ -87,14 +93,17 @@ func (server *Server) ConnectTo(address string) error {
 			OnGetData:   server.onGetData,
 			OnGetBlocks: server.onGetBlocks,
 			OnInv:       server.onInv,
+			OnBlock:     server.onBlock,
 		},
 	}, false).Start()
 
 	return nil
 }
 
-func (server *Server) Broadcast(message *network.Message) {
-
+func (server *Server) Broadcast(message network.Message) {
+	for _, peer := range server.peers {
+		peer.Send(message)
+	}
 }
 
 func (server *Server) addPeer(peer *peer.Peer) {
@@ -107,6 +116,7 @@ func (server *Server) addPeer(peer *peer.Peer) {
 func (server *Server) onReady(peer *peer.Peer) {
 	log.WithField("peer", peer).Debug("a peer is ready")
 	server.addPeer(peer)
+	server.synchronizer.HandleReadyPeer(peer)
 }
 
 func (server *Server) onDisconnected(peer *peer.Peer) {
@@ -126,6 +136,11 @@ func (server *Server) onInv(peer *peer.Peer, message *network.InvMessage) {
 }
 
 func (server *Server) onBlock(peer *peer.Peer, message *network.BlockMessage) {
+	log.WithFields(log.Fields{
+		"hash":   hex.EncodeToString(message.Header.Hash()[:]),
+		"height": message.Header.Height,
+	}).Info("received a block")
+
 	server.synchronizer.HandleBlock(peer, message)
 }
 

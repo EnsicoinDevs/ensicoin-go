@@ -178,11 +178,6 @@ func (peer *Peer) negotiate() error {
 }
 
 func (peer *Peer) handleMessage(message network.Message) {
-	log.WithFields(log.Fields{
-		"peer":    peer,
-		"message": message,
-	}).Info("message received")
-
 	switch message.MsgType() {
 	case "inv":
 		m := message.(*network.InvMessage)
@@ -234,11 +229,6 @@ func (peer *Peer) Send(message network.Message) error {
 	if err != nil {
 		return errors.Wrap(err, "error writing the message")
 	}
-
-	log.WithFields(log.Fields{
-		"peer":    peer,
-		"message": message,
-	}).Info("message sent")
 
 	return nil
 }

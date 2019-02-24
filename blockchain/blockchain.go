@@ -23,7 +23,7 @@ type Blockchain struct {
 
 	Index *BlockIndex
 
-	lock sync.RWMutex
+	lock *sync.RWMutex
 
 	orphans           map[utils.Hash]*Block
 	prevHashToOrphans map[utils.Hash][]utils.Hash
@@ -35,6 +35,8 @@ type Blockchain struct {
 func NewBlockchain() *Blockchain {
 	blockchain := &Blockchain{
 		GenesisBlock: &genesisBlock,
+
+		lock: &sync.RWMutex{},
 
 		orphans:           make(map[utils.Hash]*Block),
 		prevHashToOrphans: make(map[utils.Hash][]utils.Hash),
@@ -780,6 +782,7 @@ func (blockchain *Blockchain) processOrphans(acceptedBlock *Block) error {
 			return err
 		}
 		if valid != nil {
+			log.Info("orphan is not valid")
 			blockchain.removeOrphan(block.Hash())
 		}
 
@@ -787,7 +790,11 @@ func (blockchain *Blockchain) processOrphans(acceptedBlock *Block) error {
 		if err != nil {
 			return err
 		}
+
 		err = blockchain.processOrphans(block)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -842,7 +849,7 @@ func (blockchain *Blockchain) ProcessBlock(block *Block) (error, error) {
 		return nil, err
 	}
 	if entry == nil {
-		log.WithField("blockHash", hex.EncodeToString(block.Msg.Header.Hash()[:])).Info("accepted orphan block")
+		log.WithField("hash", hex.EncodeToString(block.Msg.Header.Hash()[:])).Info("accepted orphan block")
 
 		blockchain.addOrphan(block)
 
