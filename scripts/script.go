@@ -48,9 +48,17 @@ func (script *Script) Validate() (bool, error) {
 			stack = append(stack, []byte{0x01})
 
 		case OP_DUP:
+			if l < 1 {
+				return false, nil
+			}
+
 			stack = append(stack, stack[l-1])
 
 		case OP_EQUAL:
+			if l < 2 {
+				return false, nil
+			}
+
 			a := stack[l-1]
 			b := stack[l-2]
 
@@ -63,6 +71,10 @@ func (script *Script) Validate() (bool, error) {
 			}
 
 		case OP_VERIFY:
+			if l < 1 {
+				return false, nil
+			}
+
 			top := stack[l-1]
 			if len(top) == 1 && top[0] == 0x00 {
 				return false, nil
@@ -70,11 +82,19 @@ func (script *Script) Validate() (bool, error) {
 			stack = stack[l-1:]
 
 		case OP_HASH160:
+			if l < 1 {
+				return false, nil
+			}
+
 			hash := ripemd160.New()
 			hash.Write(stack[l-1])
 			stack[l-1] = hash.Sum(nil)
 
 		case OP_CHECKSIG:
+			if l < 2 {
+				return false, nil
+			}
+
 			rawPubKey := stack[l-1]
 			rawSig := stack[l-2]
 

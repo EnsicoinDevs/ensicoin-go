@@ -26,6 +26,8 @@ type Server struct {
 
 	mutex *sync.Mutex
 	peers []*peer.Peer
+
+	quit chan struct{}
 }
 
 func NewServer(blockchain *blockchain.Blockchain, mempool *mempool.Mempool, miner *miner.Miner) *Server {
@@ -35,6 +37,8 @@ func NewServer(blockchain *blockchain.Blockchain, mempool *mempool.Mempool, mine
 		miner:      miner,
 
 		mutex: &sync.Mutex{},
+
+		quit: make(chan struct{}),
 	}
 
 	server.synchronizer = sssync.NewSynchronizer(&sssync.Config{
@@ -62,11 +66,12 @@ func (server *Server) Start() {
 			log.Info("we have a new ingoing peer")
 			peer.NewPeer(conn, &peer.Config{
 				Callbacks: peer.PeerCallbacks{
-					OnReady:     server.onReady,
-					OnGetData:   server.onGetData,
-					OnGetBlocks: server.onGetBlocks,
-					OnInv:       server.onInv,
-					OnBlock:     server.onBlock,
+					OnReady:        server.onReady,
+					OnDisconnected: server.onDisconnected,
+					OnGetData:      server.onGetData,
+					OnGetBlocks:    server.onGetBlocks,
+					OnInv:          server.onInv,
+					OnBlock:        server.onBlock,
 				},
 			}, true).Start()
 		}
@@ -74,6 +79,8 @@ func (server *Server) Start() {
 }
 
 func (server *Server) Stop() {
+	close(server.quit)
+
 	server.listener.Close()
 }
 
@@ -89,11 +96,12 @@ func (server *Server) ConnectTo(address string) error {
 
 	peer.NewPeer(conn, &peer.Config{
 		Callbacks: peer.PeerCallbacks{
-			OnReady:     server.onReady,
-			OnGetData:   server.onGetData,
-			OnGetBlocks: server.onGetBlocks,
-			OnInv:       server.onInv,
-			OnBlock:     server.onBlock,
+			OnReady:        server.onReady,
+			OnDisconnected: server.onDisconnected,
+			OnGetData:      server.onGetData,
+			OnGetBlocks:    server.onGetBlocks,
+			OnInv:          server.onInv,
+			OnBlock:        server.onBlock,
 		},
 	}, false).Start()
 
@@ -120,6 +128,14 @@ func (server *Server) onReady(peer *peer.Peer) {
 }
 
 func (server *Server) onDisconnected(peer *peer.Peer) {
+	server.mutex.Lock()
+	for i, otherPeer := range server.peers {
+		if otherPeer == peer {
+			server.peers = append(server.peers[:i], server.peers[i+1:]...)
+		}
+	}
+	server.mutex.Unlock()
+
 	server.synchronizer.HandleDisconnectedPeer(peer)
 }
 

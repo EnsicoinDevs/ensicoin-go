@@ -10,16 +10,17 @@ import (
 )
 
 type PeerCallbacks struct {
-	OnReady      func(*Peer)
-	OnWhoami     func(*Peer, *network.WhoamiMessage)
-	OnWhoamiAck  func(*Peer, *network.WhoamiAckMessage)
-	OnInv        func(*Peer, *network.InvMessage)
-	OnGetData    func(*Peer, *network.GetDataMessage)
-	OnNotFound   func(*Peer, *network.NotFoundMessage)
-	OnBlock      func(*Peer, *network.BlockMessage)
-	OnTx         func(*Peer, *network.TxMessage)
-	OnGetBlocks  func(*Peer, *network.GetBlocksMessage)
-	OnGetMempool func(*Peer, *network.GetMempoolMessage)
+	OnReady        func(*Peer)
+	OnDisconnected func(*Peer)
+	OnWhoami       func(*Peer, *network.WhoamiMessage)
+	OnWhoamiAck    func(*Peer, *network.WhoamiAckMessage)
+	OnInv          func(*Peer, *network.InvMessage)
+	OnGetData      func(*Peer, *network.GetDataMessage)
+	OnNotFound     func(*Peer, *network.NotFoundMessage)
+	OnBlock        func(*Peer, *network.BlockMessage)
+	OnTx           func(*Peer, *network.TxMessage)
+	OnGetBlocks    func(*Peer, *network.GetBlocksMessage)
+	OnGetMempool   func(*Peer, *network.GetMempoolMessage)
 }
 
 type Config struct {
@@ -31,6 +32,8 @@ type Peer struct {
 
 	config  Config
 	ingoing bool
+
+	sending chan network.Message
 
 	quit chan struct{}
 }
@@ -44,7 +47,10 @@ func NewPeer(conn net.Conn, config *Config, ingoing bool) *Peer {
 		conn:    conn,
 		config:  *config,
 		ingoing: ingoing,
-		quit:    make(chan struct{}),
+
+		sending: make(chan network.Message, 1),
+
+		quit: make(chan struct{}),
 	}
 }
 
@@ -57,6 +63,8 @@ func (peer *Peer) Outgoing() bool {
 }
 
 func (peer *Peer) Start() error {
+	go peer.handleOutgoingMessages()
+
 	err := peer.negotiate()
 	if err != nil {
 		return err
@@ -64,14 +72,21 @@ func (peer *Peer) Start() error {
 
 	peer.config.Callbacks.OnReady(peer)
 
+	go peer.startPingLoop()
+
 	go func() {
 		var message network.Message
 
 		for {
 			message, err = network.ReadMessage(peer.conn)
 			if err != nil {
-				log.WithError(err).Error("error reading a message")
 				peer.conn.Close() // TODO: fixme
+
+				close(peer.quit)
+
+				if peer.config.Callbacks.OnDisconnected != nil {
+					peer.config.Callbacks.OnDisconnected(peer)
+				}
 				return
 			}
 
@@ -221,14 +236,48 @@ func (peer *Peer) handleMessage(message network.Message) {
 		if peer.config.Callbacks.OnGetMempool != nil {
 			peer.config.Callbacks.OnGetMempool(peer, m)
 		}
+	case "2plus2is4":
+		peer.Send(&network.MinusOneThatsThreeMessage{})
 	}
 }
 
 func (peer *Peer) Send(message network.Message) error {
+	peer.sending <- message
+
+	return nil
+}
+
+func (peer *Peer) send(message network.Message) error {
 	err := network.WriteMessage(peer.conn, message)
 	if err != nil {
 		return errors.Wrap(err, "error writing the message")
 	}
 
 	return nil
+}
+
+func (peer *Peer) startPingLoop() {
+	ticker := time.NewTicker(42 * time.Second)
+
+	for {
+		select {
+		case <-ticker.C:
+			peer.Send(&network.TwoPlusTwoIsFourMessage{})
+		case <-peer.quit:
+			return
+		}
+	}
+}
+
+func (peer *Peer) handleOutgoingMessages() {
+	for {
+		select {
+		case message := <-peer.sending:
+			if err := peer.send(message); err != nil {
+				log.WithError(err).Error("error sending a message")
+			}
+		case <-peer.quit:
+			return
+		}
+	}
 }

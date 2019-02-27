@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"github.com/EnsicoinDevs/ensicoincoin/utils"
+	log "github.com/sirupsen/logrus"
 	"io"
 )
 
@@ -85,6 +86,8 @@ func readTxIn(reader io.Reader) (*TxIn, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	log.Debug(scriptLength)
 
 	buf := make([]byte, scriptLength)
 	_, err = io.ReadFull(reader, buf)
