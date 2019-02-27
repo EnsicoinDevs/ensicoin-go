@@ -20,9 +20,9 @@ func (msg *MinusOneThatsThreeMessage) Encode(writer io.Writer) error {
 }
 
 func (msg *MinusOneThatsThreeMessage) MsgType() string {
-	return "2plus2is4"
+	return "minus1thats3"
 }
 
 func (msg MinusOneThatsThreeMessage) String() string {
-	return "2Plus2Is4[]"
+	return "Minus1Thats3[]"
 }
