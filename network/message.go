@@ -86,6 +86,10 @@ func newMessageByType(msgType string) (Message, error) {
 		msg = NewTxMessage()
 	case "getmempool":
 		msg = NewGetMempoolMessage()
+	case "2plus2is4":
+		msg = NewTwoPlusTwoIsFourMessage()
+	case "minus1thats3":
+		msg = NewMinusOneThatsThreeMessage()
 	default:
 		return nil, errors.New("bad message type: <" + msgType + ">")
 	}

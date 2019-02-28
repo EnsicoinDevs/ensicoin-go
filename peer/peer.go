@@ -5,6 +5,7 @@ import (
 	"github.com/EnsicoinDevs/ensicoincoin/network"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+	"io"
 	"net"
 	"time"
 )
@@ -80,14 +81,18 @@ func (peer *Peer) Start() error {
 		for {
 			message, err = network.ReadMessage(peer.conn)
 			if err != nil {
-				peer.conn.Close() // TODO: fixme
+				if err == io.EOF {
+					peer.conn.Close() // TODO: fixme
 
-				close(peer.quit)
+					close(peer.quit)
 
-				if peer.config.Callbacks.OnDisconnected != nil {
-					peer.config.Callbacks.OnDisconnected(peer)
+					if peer.config.Callbacks.OnDisconnected != nil {
+						peer.config.Callbacks.OnDisconnected(peer)
+					}
+					return
+				} else {
+					log.WithError(err).Error("error reading a message")
 				}
-				return
 			}
 
 			go peer.handleMessage(message)
