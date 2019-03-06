@@ -10,7 +10,11 @@ func ComputeMerkleRoot(hashes []*utils.Hash) *utils.Hash {
 	if len(hashes) == 0 {
 		hash := sha256.Sum256(nil)
 		return utils.NewHash(hash[:])
-	} // TODO: delete
+	}
+
+	if len(hashes) == 1 {
+		hashes = append(hashes, hashes[0])
+	}
 
 	for len(hashes) > 1 {
 		log.WithField("len(hashes)", len(hashes)).Debug("next iteration")
