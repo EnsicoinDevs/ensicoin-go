@@ -25,12 +25,14 @@ require (
 	github.com/gregjones/httpcache v0.0.0-20190212212710-3befbb6ad0cc // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.8.2 // indirect
 	github.com/hashicorp/golang-lru v0.5.1 // indirect
+	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/jessevdk/go-flags v1.4.0 // indirect
 	github.com/kisielk/errcheck v1.2.0 // indirect
 	github.com/kisielk/gotool v1.0.0 // indirect
 	github.com/kkdai/bstream v0.0.0-20181106074824-b3251f7901ec // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/mattn/go-runewidth v0.0.4 // indirect
+	github.com/mattn/go-tty v0.0.0-20181127064339-e4f871175a2f // indirect
 	github.com/microcosm-cc/bluemonday v1.0.2 // indirect
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/onsi/ginkgo v1.8.0 // indirect

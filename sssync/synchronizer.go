@@ -134,9 +134,13 @@ func (sync *Synchronizer) synchronize() {
 }
 
 func (sync *Synchronizer) handlePushedBlock(block *blockchain.Block) {
+	log.Debug("removing tx from mempool")
+
 	for _, tx := range block.Txs {
 		sync.Mempool.RemoveTx(tx)
 	}
+
+	log.Debug("broadcasting")
 
 	sync.config.Broadcast(&network.InvMessage{
 		Inventory: []*network.InvVect{
@@ -146,7 +150,12 @@ func (sync *Synchronizer) handlePushedBlock(block *blockchain.Block) {
 			},
 		},
 	})
+
+	log.Debug("updtating best block")
+
 	sync.updateMinerBestBlock()
+
+	sync.config.OnAcceptedBlock(block)
 }
 
 func (sync *Synchronizer) handlePoppedBlock(block *blockchain.Block) {

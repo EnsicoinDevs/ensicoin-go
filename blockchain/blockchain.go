@@ -11,6 +11,7 @@ import (
 	bolt "github.com/etcd-io/bbolt"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 	"math/big"
 	"strconv"
 	"sync"
@@ -61,7 +62,8 @@ var (
 
 func (blockchain *Blockchain) Load() error {
 	var err error
-	blockchain.db, err = bolt.Open("blockchain.db", 0600, nil)
+
+	blockchain.db, err = bolt.Open(viper.GetString("datadir")+"blockchain.db", 0600, nil)
 	if err != nil {
 		return errors.Wrap(err, "error opening the blockchain database")
 	}

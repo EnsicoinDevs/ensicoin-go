@@ -26,6 +26,7 @@ var (
 func init() {
 	pflag.IntP("port", "p", consensus.INGOING_PORT, "listening port")
 	pflag.StringP("cfgfile", "c", "", "config file")
+	pflag.StringP("datadir", "d", "", "data dir")
 	pflag.StringP("token", "t", "", "a discord token")
 	pflag.BoolP("mining", "m", false, "enable mining")
 	pflag.BoolP("interactive", "i", false, "enable prompt")
@@ -52,7 +53,7 @@ func initConfig() {
 	}
 
 	if err := viper.ReadInConfig(); err != nil {
-		log.WithError(err).Fatal("can't read config")
+		log.WithError(err).Error("can't read config")
 	}
 }
 
@@ -155,6 +156,7 @@ func launch() {
 		miner.Start()
 	}
 
+	rpcServer.server = server
 	go rpcServer.Start()
 
 	log.Info("EnsiCoinCoin is running")

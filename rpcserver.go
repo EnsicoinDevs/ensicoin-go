@@ -5,10 +5,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/EnsicoinDevs/ensicoincoin/blockchain"
-	"github.com/EnsicoinDevs/ensicoincoin/mempool"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
 	pb "github.com/EnsicoinDevs/ensicoincoin/rpc"
 	"github.com/EnsicoinDevs/ensicoincoin/utils"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"net"
@@ -22,7 +22,6 @@ type txWithBlock struct {
 
 type rpcServer struct {
 	blockchain *blockchain.Blockchain
-	mempool    *mempool.Mempool
 	server     *Server
 
 	acceptedTxs chan txWithBlock
@@ -47,9 +46,9 @@ func (s *rpcServer) HandleAcceptedTx(tx *blockchain.Tx) error {
 	return nil
 }
 
-func newRpcServer(_blockchain *blockchain.Blockchain, server *Server) *rpcServer {
+func newRpcServer(blockchain *blockchain.Blockchain, server *Server) *rpcServer {
 	return &rpcServer{
-		blockchain:  _blockchain,
+		blockchain:  blockchain,
 		server:      server,
 		acceptedTxs: make(chan txWithBlock),
 		quit:        make(chan struct{}),
@@ -65,6 +64,8 @@ func (s *rpcServer) Start() error {
 	grpcServer := grpc.NewServer()
 
 	pb.RegisterNodeServer(grpcServer, s)
+
+	go s.startAcceptedTxsHandler()
 
 	if err := grpcServer.Serve(listener); err != nil {
 		return err
@@ -189,7 +190,10 @@ func (s *rpcServer) PublishTx(ctx context.Context, in *pb.PublishTxRequest) (*pb
 func (s *rpcServer) ListenIncomingTxs(in *pb.ListenIncomingTxsRequest, stream pb.Node_ListenIncomingTxsServer) error {
 	ch := make(chan txWithBlock)
 	s.acceptedTxsListenersMutex.Lock()
+	s.acceptedTxsListeners = append(s.acceptedTxsListeners, ch)
 	s.acceptedTxsListenersMutex.Unlock()
+	log.Warn("added")
+	defer log.Warn("good bye")
 
 	for txWithBlock := range ch {
 		var block *pb.Block
@@ -235,7 +239,25 @@ func (s *rpcServer) ListenIncomingTxs(in *pb.ListenIncomingTxsRequest, stream pb
 			Tx:    tx,
 			Block: block,
 		}); err != nil {
+			s.removeAcceptedTxsListener(ch)
+
 			return err
+		}
+	}
+
+	return s.removeAcceptedTxsListener(ch)
+}
+
+func (s *rpcServer) removeAcceptedTxsListener(ch chan txWithBlock) error {
+	log.Warn("removed")
+
+	s.acceptedTxsListenersMutex.Lock()
+	defer s.acceptedTxsListenersMutex.Unlock()
+
+	for i, och := range s.acceptedTxsListeners {
+		if och == ch {
+			s.acceptedTxsListeners = append(s.acceptedTxsListeners[:i], s.acceptedTxsListeners[i+1:]...)
+			return nil
 		}
 	}
 
