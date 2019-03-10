@@ -21,6 +21,7 @@ type Server struct {
 	mempool      *mempool.Mempool
 	miner        *miner.Miner
 	synchronizer *sssync.Synchronizer
+	rpcServer    *rpcServer
 
 	listener net.Listener
 
@@ -30,11 +31,12 @@ type Server struct {
 	quit chan struct{}
 }
 
-func NewServer(blockchain *blockchain.Blockchain, mempool *mempool.Mempool, miner *miner.Miner) *Server {
+func NewServer(blockchain *blockchain.Blockchain, mempool *mempool.Mempool, miner *miner.Miner, rpcServer *rpcServer) *Server {
 	server := &Server{
 		blockchain: blockchain,
 		mempool:    mempool,
 		miner:      miner,
+		rpcServer:  rpcServer,
 
 		mutex: &sync.Mutex{},
 
@@ -42,7 +44,8 @@ func NewServer(blockchain *blockchain.Blockchain, mempool *mempool.Mempool, mine
 	}
 
 	server.synchronizer = sssync.NewSynchronizer(&sssync.Config{
-		Broadcast: server.Broadcast,
+		Broadcast:       server.Broadcast,
+		OnAcceptedBlock: server.rpcServer.HandleAcceptedBlock,
 	}, server.blockchain, server.mempool, server.miner)
 	server.miner.Config.ProcessBlock = server.synchronizer.ProcessBlock
 
@@ -84,10 +87,6 @@ func (server *Server) Stop() {
 	server.listener.Close()
 }
 
-func (server *Server) ProcessTx(message *network.TxMessage) {
-	server.mempool.ProcessTx(blockchain.NewTxFromTxMessage(message))
-}
-
 func (server *Server) ConnectTo(address string) error {
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
@@ -102,16 +101,19 @@ func (server *Server) ConnectTo(address string) error {
 			OnGetBlocks:    server.onGetBlocks,
 			OnInv:          server.onInv,
 			OnBlock:        server.onBlock,
+			OnTx:           server.onTx,
 		},
 	}, false).Start()
 
 	return nil
 }
 
-func (server *Server) Broadcast(message network.Message) {
+func (server *Server) Broadcast(message network.Message) error {
 	for _, peer := range server.peers {
 		peer.Send(message)
 	}
+
+	return nil
 }
 
 func (server *Server) addPeer(peer *peer.Peer) {
@@ -137,6 +139,8 @@ func (server *Server) onDisconnected(peer *peer.Peer) {
 	server.mutex.Unlock()
 
 	server.synchronizer.HandleDisconnectedPeer(peer)
+
+	log.Warning("a peer has been disconnected")
 }
 
 func (server *Server) onInv(peer *peer.Peer, message *network.InvMessage) {
@@ -144,7 +148,11 @@ func (server *Server) onInv(peer *peer.Peer, message *network.InvMessage) {
 		if inv.InvType == network.INV_VECT_BLOCK {
 			server.synchronizer.HandleBlockInvVect(peer, inv)
 		} else if inv.InvType == network.INV_VECT_TX {
-
+			if server.mempool.FindTxByHash(inv.Hash) == nil {
+				peer.Send(&network.GetDataMessage{
+					Inventory: []*network.InvVect{inv},
+				})
+			}
 		} else {
 			// TODO: handle this error
 		}
@@ -158,6 +166,18 @@ func (server *Server) onBlock(peer *peer.Peer, message *network.BlockMessage) {
 	}).Info("received a block")
 
 	server.synchronizer.HandleBlock(peer, message)
+}
+
+func (server *Server) ProcessTx(message *network.TxMessage) {
+	server.mempool.ProcessTx(blockchain.NewTxFromTxMessage(message))
+}
+
+func (server *Server) onTx(peer *peer.Peer, message *network.TxMessage) {
+	log.WithFields(log.Fields{
+		"hash": hex.EncodeToString(message.Hash()[:]),
+	}).Info("received a tx")
+
+	server.ProcessTx(message)
 }
 
 func (server *Server) onGetData(peer *peer.Peer, message *network.GetDataMessage) {

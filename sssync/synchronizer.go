@@ -13,7 +13,8 @@ import (
 )
 
 type Config struct {
-	Broadcast func(network.Message)
+	Broadcast       func(network.Message) error
+	OnAcceptedBlock func(*blockchain.Block) error
 }
 
 type Synchronizer struct {
@@ -88,15 +89,15 @@ func (sync *Synchronizer) HandleBlock(peer *peer.Peer, message *network.BlockMes
 func (sync *Synchronizer) ProcessBlock(message *network.BlockMessage) {
 	valid, err := sync.Blockchain.ProcessBlock(blockchain.NewBlockFromBlockMessage(message))
 	if err != nil {
-		log.WithError(err).WithField("block_hash", hex.EncodeToString(message.Header.Hash()[:])).Error("error processing a block")
+		log.WithError(err).WithField("hash", hex.EncodeToString(message.Header.Hash()[:])).Error("error processing a block")
 		return
 	}
 	if valid != nil {
-		log.WithField("block_hash", hex.EncodeToString(message.Header.Hash()[:])).WithField("error", valid).Info("processed an invalid block")
+		log.WithField("hash", hex.EncodeToString(message.Header.Hash()[:])).WithField("error", valid).Info("processed an invalid block")
 		return
 	}
 
-	log.WithField("blockHash", hex.EncodeToString(message.Header.Hash()[:])).Info("processed a valid block")
+	log.WithField("hash", hex.EncodeToString(message.Header.Hash()[:])).Info("processed a valid block")
 }
 
 func (sync *Synchronizer) HandleReadyPeer(peer *peer.Peer) {
@@ -157,17 +158,25 @@ func (sync *Synchronizer) handlePoppedBlock(block *blockchain.Block) {
 }
 
 func (sync *Synchronizer) updateMinerBestBlock() error {
+	log.Debug("updating miner best block")
+
 	bestBlock, err := sync.Blockchain.FindLongestChain()
 	if err != nil {
 		return err
 	}
 
+	log.Debug(bestBlock)
+
 	if sync.Miner.BestBlock == nil {
+		log.Debug("miner best block is nil")
+
 		sync.Miner.UpdateBestBlock(bestBlock)
 		return nil
 	}
 
 	if !sync.Miner.BestBlock.Hash().IsEqual(bestBlock.Hash()) {
+		log.Debug("miner best block is outdated")
+
 		sync.Miner.UpdateBestBlock(bestBlock)
 		return nil
 	}

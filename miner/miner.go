@@ -70,7 +70,7 @@ func (miner *Miner) startMainLoop() {
 }
 
 func (miner *Miner) solve() bool {
-	log.Debug("solver is running")
+	log.WithField("HashPrevBlock", miner.block.Header.HashPrevBlock).Debug("solver is running")
 
 	var hash *utils.Hash
 	var bestHeight uint32

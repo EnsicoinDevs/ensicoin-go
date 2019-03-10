@@ -5,23 +5,54 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/EnsicoinDevs/ensicoincoin/blockchain"
+	"github.com/EnsicoinDevs/ensicoincoin/mempool"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
 	pb "github.com/EnsicoinDevs/ensicoincoin/rpc"
 	"github.com/EnsicoinDevs/ensicoincoin/utils"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"net"
+	"sync"
 )
+
+type txWithBlock struct {
+	Tx    *blockchain.Tx
+	Block *blockchain.Block
+}
 
 type rpcServer struct {
 	blockchain *blockchain.Blockchain
+	mempool    *mempool.Mempool
 	server     *Server
+
+	acceptedTxs chan txWithBlock
+
+	acceptedTxsListenersMutex sync.Mutex
+	acceptedTxsListeners      []chan txWithBlock
+
+	quit chan struct{}
 }
 
-func newRpcServer(blockchain *blockchain.Blockchain, server *Server) *rpcServer {
+func (s *rpcServer) HandleAcceptedBlock(block *blockchain.Block) error {
+	for _, tx := range block.Txs {
+		s.acceptedTxs <- txWithBlock{tx, block}
+	}
+
+	return nil
+}
+
+func (s *rpcServer) HandleAcceptedTx(tx *blockchain.Tx) error {
+	s.acceptedTxs <- txWithBlock{tx, nil}
+
+	return nil
+}
+
+func newRpcServer(_blockchain *blockchain.Blockchain, server *Server) *rpcServer {
 	return &rpcServer{
-		blockchain: blockchain,
-		server:     server,
+		blockchain:  _blockchain,
+		server:      server,
+		acceptedTxs: make(chan txWithBlock),
+		quit:        make(chan struct{}),
 	}
 }
 
@@ -33,11 +64,37 @@ func (s *rpcServer) Start() error {
 
 	grpcServer := grpc.NewServer()
 
-	pb.RegisterBlockchainServer(grpcServer, s)
-	pb.RegisterTxsServer(grpcServer, s)
+	pb.RegisterNodeServer(grpcServer, s)
 
 	if err := grpcServer.Serve(listener); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (s *rpcServer) Stop() error {
+	close(s.quit)
+	return nil
+}
+
+func (s *rpcServer) startAcceptedTxsHandler() error {
+	for {
+		select {
+		case tx := <-s.acceptedTxs:
+			s.acceptedTxsListenersMutex.Lock()
+			for _, ch := range s.acceptedTxsListeners {
+				ch <- tx
+			}
+			s.acceptedTxsListenersMutex.Unlock()
+		case <-s.quit:
+			s.acceptedTxsListenersMutex.Lock()
+			for _, ch := range s.acceptedTxsListeners {
+				close(ch)
+			}
+			s.acceptedTxsListenersMutex.Unlock()
+			return nil
+		}
 	}
 
 	return nil
@@ -127,4 +184,60 @@ func (s *rpcServer) PublishTx(ctx context.Context, in *pb.PublishTxRequest) (*pb
 	s.server.ProcessTx(tx)
 
 	return &pb.PublishTxReply{}, nil
+}
+
+func (s *rpcServer) ListenIncomingTxs(in *pb.ListenIncomingTxsRequest, stream pb.Node_ListenIncomingTxsServer) error {
+	ch := make(chan txWithBlock)
+	s.acceptedTxsListenersMutex.Lock()
+	s.acceptedTxsListenersMutex.Unlock()
+
+	for txWithBlock := range ch {
+		var block *pb.Block
+
+		if txWithBlock.Block != nil {
+			block = &pb.Block{
+				Hash:           hex.EncodeToString(txWithBlock.Block.Hash()[:]),
+				Version:        txWithBlock.Block.Msg.Header.Version,
+				Flags:          txWithBlock.Block.Msg.Header.Flags,
+				HashPrevBlock:  hex.EncodeToString(txWithBlock.Block.Msg.Header.HashPrevBlock[:]),
+				HashMerkleRoot: hex.EncodeToString(txWithBlock.Block.Msg.Header.HashMerkleRoot[:]),
+				Timestamp:      txWithBlock.Block.Msg.Header.Timestamp.Unix(),
+				Height:         txWithBlock.Block.Msg.Header.Height,
+				Bits:           txWithBlock.Block.Msg.Header.Bits,
+				Nonce:          txWithBlock.Block.Msg.Header.Nonce,
+			}
+		}
+
+		tx := &pb.Tx{
+			Hash:    hex.EncodeToString(txWithBlock.Tx.Hash()[:]),
+			Version: txWithBlock.Tx.Msg.Version,
+			Flags:   txWithBlock.Tx.Msg.Flags,
+		}
+
+		for _, input := range txWithBlock.Tx.Msg.Inputs {
+			tx.Inputs = append(tx.Inputs, &pb.Input{
+				PreviousOutput: &pb.Outpoint{
+					Hash:  hex.EncodeToString(input.PreviousOutput.Hash[:]),
+					Index: input.PreviousOutput.Index,
+				},
+				Script: input.Script,
+			})
+		}
+
+		for _, output := range txWithBlock.Tx.Msg.Outputs {
+			tx.Outputs = append(tx.Outputs, &pb.Output{
+				Value:  output.Value,
+				Script: output.Script,
+			})
+		}
+
+		if err := stream.Send(&pb.TxWithBlock{
+			Tx:    tx,
+			Block: block,
+		}); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

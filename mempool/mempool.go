@@ -11,7 +11,8 @@ import (
 )
 
 type Config struct {
-	FetchUtxos func(tx *blockchain.Tx) (*blockchain.Utxos, []*network.Outpoint, error)
+	FetchUtxos   func(tx *blockchain.Tx) (*blockchain.Utxos, []*network.Outpoint, error)
+	OnAcceptedTx func(tx *blockchain.Tx) error
 }
 
 type Mempool struct {
@@ -57,6 +58,8 @@ func (mempool *Mempool) addTx(tx *blockchain.Tx) {
 	for _, input := range tx.Msg.Inputs {
 		mempool.outpoints[*input.PreviousOutput] = tx
 	}
+
+	mempool.config.OnAcceptedTx(tx)
 }
 
 func (mempool *Mempool) removeTx(tx *blockchain.Tx) {
@@ -67,6 +70,8 @@ func (mempool *Mempool) removeTx(tx *blockchain.Tx) {
 	delete(mempool.txs, *tx.Hash())
 
 	// TODO: (important) recursively remove
+
+	mempool.config.OnAcceptedTx(tx)
 }
 
 func (mempool *Mempool) addOrphan(tx *blockchain.Tx) {

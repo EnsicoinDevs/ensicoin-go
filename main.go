@@ -124,8 +124,11 @@ func launch() {
 	blockchain := blockchain.NewBlockchain()
 	blockchain.Load()
 
+	rpcServer := newRpcServer(blockchain, server)
+
 	mempool := mempool.NewMempool(&mempool.Config{
-		FetchUtxos: blockchain.FetchUtxos,
+		FetchUtxos:   blockchain.FetchUtxos,
+		OnAcceptedTx: rpcServer.HandleAcceptedTx,
 	})
 
 	bestBlock, err := blockchain.FindLongestChain()
@@ -140,7 +143,7 @@ func launch() {
 		Mempool:    mempool,
 	}
 
-	server = NewServer(blockchain, mempool, miner)
+	server = NewServer(blockchain, mempool, miner, rpcServer)
 
 	go server.Start()
 
@@ -151,8 +154,6 @@ func launch() {
 	if viper.GetBool("mining") {
 		miner.Start()
 	}
-
-	rpcServer := newRpcServer(blockchain, server)
 
 	go rpcServer.Start()
 
