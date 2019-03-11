@@ -9,6 +9,7 @@ import (
 	pb "github.com/EnsicoinDevs/ensicoincoin/rpc"
 	"github.com/EnsicoinDevs/ensicoincoin/utils"
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"net"
@@ -33,15 +34,19 @@ type rpcServer struct {
 }
 
 func (s *rpcServer) HandleAcceptedBlock(block *blockchain.Block) error {
+	log.Debug("handling an accepted block")
 	for _, tx := range block.Txs {
 		s.acceptedTxs <- txWithBlock{tx, block}
+		log.Debug("ohoh")
 	}
 
 	return nil
 }
 
 func (s *rpcServer) HandleAcceptedTx(tx *blockchain.Tx) error {
+	log.Debug("handling an accepted tx")
 	s.acceptedTxs <- txWithBlock{tx, nil}
+	log.Debug("ahah")
 
 	return nil
 }
@@ -56,7 +61,7 @@ func newRpcServer(blockchain *blockchain.Blockchain, server *Server) *rpcServer 
 }
 
 func (s *rpcServer) Start() error {
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", 4225))
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", viper.GetInt("port")+1))
 	if err != nil {
 		return err
 	}
@@ -81,13 +86,22 @@ func (s *rpcServer) Stop() error {
 
 func (s *rpcServer) startAcceptedTxsHandler() error {
 	for {
+		log.Warn("miaou")
 		select {
 		case tx := <-s.acceptedTxs:
-			s.acceptedTxsListenersMutex.Lock()
-			for _, ch := range s.acceptedTxsListeners {
-				ch <- tx
-			}
-			s.acceptedTxsListenersMutex.Unlock()
+			log.Debug(0)
+			go func() {
+				log.Debug(1)
+				s.acceptedTxsListenersMutex.Lock()
+				log.Debug(2)
+				for _, ch := range s.acceptedTxsListeners {
+					ch <- tx
+					log.Debug(3)
+				}
+				s.acceptedTxsListenersMutex.Unlock()
+				log.Debug(4)
+			}()
+			log.Debug(5)
 		case <-s.quit:
 			s.acceptedTxsListenersMutex.Lock()
 			for _, ch := range s.acceptedTxsListeners {
@@ -97,6 +111,8 @@ func (s *rpcServer) startAcceptedTxsHandler() error {
 			return nil
 		}
 	}
+
+	log.Warn("oups")
 
 	return nil
 }
