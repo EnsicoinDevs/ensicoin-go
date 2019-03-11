@@ -1,6 +1,7 @@
 package mempool
 
 import (
+	"encoding/hex"
 	"github.com/EnsicoinDevs/ensicoincoin/blockchain"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
 	"github.com/EnsicoinDevs/ensicoincoin/scripts"
@@ -144,7 +145,9 @@ func (mempool *Mempool) validateTx(tx *blockchain.Tx) (bool, []*utils.Hash) {
 
 	for _, input := range tx.Msg.Inputs {
 		utxo := utxos.FindEntry(input.PreviousOutput)
+
 		script := scripts.NewScript(tx.Msg, input, utxo.Amount(), utxo.Script(), input.Script)
+
 		valid, err := script.Validate()
 		if err != nil {
 			return false, nil
@@ -201,6 +204,8 @@ func (mempool *Mempool) processTx(tx *blockchain.Tx) []*utils.Hash {
 	valid, missingParents := mempool.validateTx(tx)
 
 	if !valid {
+		log.WithField("hash", hex.EncodeToString(tx.Hash()[:])).Warn("tx refused")
+
 		return nil
 	}
 
@@ -209,7 +214,7 @@ func (mempool *Mempool) processTx(tx *blockchain.Tx) []*utils.Hash {
 
 		acceptedTxs = append(acceptedTxs, tx.Hash())
 		mempool.addTx(tx)
-		log.Info("tx accepted")
+		log.WithField("hash", hex.EncodeToString(tx.Hash()[:])).Warn("tx accepted")
 		acceptedTxs = append(acceptedTxs, mempool.processOrphans(tx)...)
 
 		return acceptedTxs

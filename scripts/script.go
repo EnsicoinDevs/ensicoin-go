@@ -21,7 +21,7 @@ func NewScript(tx *network.TxMessage, input *network.TxIn, spentOutputValue uint
 		SpentOutputValue: spentOutputValue,
 	}
 
-	for _, opcode := range append(outputScript, inputScript...) {
+	for _, opcode := range append(inputScript, outputScript...) {
 		script.Opcodes = append(script.Opcodes, Opcode(opcode))
 	}
 
@@ -37,6 +37,8 @@ func (script *Script) Validate() (bool, error) {
 
 		if numberOfBytesToPush > 0 {
 			stack[l-1] = append(stack[l-1], byte(opcode))
+			numberOfBytesToPush--
+
 			continue
 		}
 
@@ -49,7 +51,6 @@ func (script *Script) Validate() (bool, error) {
 
 		case OP_DUP:
 			if l < 1 {
-				return false, nil
 			}
 
 			stack = append(stack, stack[l-1])
@@ -79,7 +80,7 @@ func (script *Script) Validate() (bool, error) {
 			if len(top) == 1 && top[0] == 0x00 {
 				return false, nil
 			}
-			stack = stack[l-1:]
+			stack = stack[:l-1]
 
 		case OP_HASH160:
 			if l < 1 {
@@ -125,6 +126,7 @@ func (script *Script) Validate() (bool, error) {
 		default:
 			if 0x01 <= opcode && opcode <= 0x75 {
 				numberOfBytesToPush = uint8(opcode)
+
 				stack = append(stack, nil)
 			} else {
 				return false, nil

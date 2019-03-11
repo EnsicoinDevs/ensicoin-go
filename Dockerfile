@@ -15,4 +15,5 @@ RUN mkdir /data
 EXPOSE 4224
 EXPOSE 4225
 
-CMD [ "./ensicoincoin" "--datadir=/data/" ]
+ENTRYPOINT [ "./ensicoincoin" ]
+CMD [ "--datadir" "/data/" ]
