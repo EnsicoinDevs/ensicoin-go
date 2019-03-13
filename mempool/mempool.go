@@ -71,8 +71,6 @@ func (mempool *Mempool) removeTx(tx *blockchain.Tx) {
 	delete(mempool.txs, *tx.Hash())
 
 	// TODO: (important) recursively remove
-
-	mempool.config.OnAcceptedTx(tx)
 }
 
 func (mempool *Mempool) addOrphan(tx *blockchain.Tx) {
@@ -81,6 +79,8 @@ func (mempool *Mempool) addOrphan(tx *blockchain.Tx) {
 	for _, input := range tx.Msg.Inputs {
 		mempool.orphansOutpoints[*input.PreviousOutput] = tx
 	}
+
+	mempool.config.OnAcceptedTx(tx)
 }
 
 func (mempool *Mempool) findTxByHash(hash *utils.Hash) *blockchain.Tx {
