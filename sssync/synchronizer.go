@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"github.com/EnsicoinDevs/ensicoincoin/blockchain"
 	"github.com/EnsicoinDevs/ensicoincoin/mempool"
-	"github.com/EnsicoinDevs/ensicoincoin/miner"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
 	"github.com/EnsicoinDevs/ensicoincoin/peer"
 	"github.com/EnsicoinDevs/ensicoincoin/utils"
@@ -22,7 +21,6 @@ type Synchronizer struct {
 
 	Blockchain *blockchain.Blockchain
 	Mempool    *mempool.Mempool
-	Miner      *miner.Miner
 
 	mutex             *sync.Mutex
 	synchronizingPeer *peer.Peer
@@ -30,13 +28,12 @@ type Synchronizer struct {
 	quit chan struct{}
 }
 
-func NewSynchronizer(config *Config, blockchain *blockchain.Blockchain, mempool *mempool.Mempool, miner *miner.Miner) *Synchronizer {
+func NewSynchronizer(config *Config, blockchain *blockchain.Blockchain, mempool *mempool.Mempool) *Synchronizer {
 	return &Synchronizer{
 		config: *config,
 
 		Blockchain: blockchain,
 		Mempool:    mempool,
-		Miner:      miner,
 
 		mutex: &sync.Mutex{},
 
@@ -44,23 +41,20 @@ func NewSynchronizer(config *Config, blockchain *blockchain.Blockchain, mempool 
 	}
 }
 
-func (sync *Synchronizer) Start() {
-	go func() {
-		for {
-			select {
-			case <-sync.quit:
-				return
-			case block := <-sync.Blockchain.PushedBlocks:
-				go sync.handlePushedBlock(block)
-			case block := <-sync.Blockchain.PoppedBlocks:
-				go sync.handlePoppedBlock(block)
-			}
-		}
-	}()
+func (sync *Synchronizer) Start() error {
+	return nil
 }
 
-func (sync *Synchronizer) Stop() {
-	sync.quit <- struct{}{}
+func (sync *Synchronizer) Stop() error {
+	return nil
+}
+
+func (sync *Synchronizer) OnPushedBlock(block *blockchain.Block) error {
+	return sync.handlePushedBlock(block)
+}
+
+func (sync *Synchronizer) OnPoppedBlock(block *blockchain.Block) error {
+	return sync.handlePoppedBlock(block)
 }
 
 func (sync *Synchronizer) HandleBlockInvVect(peer *peer.Peer, invVect *network.InvVect) error {
@@ -121,19 +115,19 @@ func (sync *Synchronizer) HandleDisconnectedPeer(peer *peer.Peer) {
 }
 
 func (sync *Synchronizer) synchronize() {
-	longestChain, err := sync.Blockchain.FindLongestChain()
+	bestBlock, err := sync.Blockchain.FindBestBlock()
 	if err != nil {
 		log.WithError(err).Error("error finding the longest chain")
 		return
 	}
 
 	sync.synchronizingPeer.Send(&network.GetBlocksMessage{
-		BlockLocator: []*utils.Hash{longestChain.Hash()},
+		BlockLocator: []*utils.Hash{bestBlock.Hash()},
 		HashStop:     utils.NewHash(nil),
 	})
 }
 
-func (sync *Synchronizer) handlePushedBlock(block *blockchain.Block) {
+func (sync *Synchronizer) handlePushedBlock(block *blockchain.Block) error {
 	log.Debug("removing tx from mempool")
 
 	for _, tx := range block.Txs {
@@ -153,41 +147,14 @@ func (sync *Synchronizer) handlePushedBlock(block *blockchain.Block) {
 
 	log.Debug("updtating best block")
 
-	sync.updateMinerBestBlock()
-
 	sync.config.OnAcceptedBlock(block)
+
+	return nil
 }
 
-func (sync *Synchronizer) handlePoppedBlock(block *blockchain.Block) {
+func (sync *Synchronizer) handlePoppedBlock(block *blockchain.Block) error {
 	for _, tx := range block.Txs {
 		sync.Mempool.ProcessTx(tx)
-	}
-
-	sync.updateMinerBestBlock()
-}
-
-func (sync *Synchronizer) updateMinerBestBlock() error {
-	log.Debug("updating miner best block")
-
-	bestBlock, err := sync.Blockchain.FindLongestChain()
-	if err != nil {
-		return err
-	}
-
-	log.Debug(bestBlock)
-
-	if sync.Miner.BestBlock == nil {
-		log.Debug("miner best block is nil")
-
-		sync.Miner.UpdateBestBlock(bestBlock)
-		return nil
-	}
-
-	if !sync.Miner.BestBlock.Hash().IsEqual(bestBlock.Hash()) {
-		log.Debug("miner best block is outdated")
-
-		sync.Miner.UpdateBestBlock(bestBlock)
-		return nil
 	}
 
 	return nil

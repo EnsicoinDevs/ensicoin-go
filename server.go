@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/EnsicoinDevs/ensicoincoin/blockchain"
 	"github.com/EnsicoinDevs/ensicoincoin/mempool"
-	"github.com/EnsicoinDevs/ensicoincoin/miner"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
 	"github.com/EnsicoinDevs/ensicoincoin/peer"
 	"github.com/EnsicoinDevs/ensicoincoin/sssync"
@@ -19,7 +18,6 @@ import (
 type Server struct {
 	blockchain   *blockchain.Blockchain
 	mempool      *mempool.Mempool
-	miner        *miner.Miner
 	synchronizer *sssync.Synchronizer
 	rpcServer    *rpcServer
 
@@ -31,29 +29,36 @@ type Server struct {
 	quit chan struct{}
 }
 
-func NewServer(blockchain *blockchain.Blockchain, mempool *mempool.Mempool, miner *miner.Miner, rpcServer *rpcServer) *Server {
+func NewServer() *Server {
 	server := &Server{
-		blockchain: blockchain,
-		mempool:    mempool,
-		miner:      miner,
-		rpcServer:  rpcServer,
-
 		mutex: &sync.Mutex{},
 
 		quit: make(chan struct{}),
 	}
 
+	server.blockchain = blockchain.NewBlockchain()
+
+	server.rpcServer = newRpcServer(server.blockchain, server)
+
+	server.mempool = mempool.NewMempool(&mempool.Config{
+		FetchUtxos:   server.blockchain.FetchUtxos,
+		OnAcceptedTx: server.rpcServer.HandleAcceptedTx,
+	})
+
 	server.synchronizer = sssync.NewSynchronizer(&sssync.Config{
 		Broadcast:       server.Broadcast,
 		OnAcceptedBlock: server.rpcServer.HandleAcceptedBlock,
-	}, server.blockchain, server.mempool, server.miner)
-	server.miner.Config.ProcessBlock = server.synchronizer.ProcessBlock
+	}, server.blockchain, server.mempool)
 
 	return server
 }
 
 func (server *Server) Start() {
-	server.synchronizer.Start()
+	go server.blockchain.Load()
+	go server.mempool.Start()
+
+	go server.synchronizer.Start()
+	go server.rpcServer.Start()
 
 	var err error
 	server.listener, err = net.Listen("tcp", fmt.Sprintf(":%d", viper.GetInt("port")))
@@ -65,6 +70,7 @@ func (server *Server) Start() {
 		conn, err := server.listener.Accept()
 		if err != nil {
 			log.WithError(err).Error("error accepting a new connection")
+			return
 		} else {
 			log.Info("we have a new ingoing peer")
 			peer.NewPeer(conn, &peer.Config{
@@ -81,10 +87,26 @@ func (server *Server) Start() {
 	}
 }
 
-func (server *Server) Stop() {
+func (server *Server) Stop() error {
+	log.Debug("stopping rpc server")
+	err := server.rpcServer.Stop()
+	if err != nil {
+		return err
+	}
+
+	log.Debug("stopping server")
 	close(server.quit)
 
 	server.listener.Close()
+
+	log.Debug("stopping synchronizer")
+	err = server.synchronizer.Stop()
+	if err != nil {
+		return err
+	}
+
+	log.Debug("stopping mempool")
+	return server.mempool.Stop()
 }
 
 func (server *Server) ConnectTo(address string) error {

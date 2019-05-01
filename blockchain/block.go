@@ -5,7 +5,6 @@ import (
 	"errors"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
 	"github.com/EnsicoinDevs/ensicoincoin/utils"
-	"math/big"
 	"reflect"
 )
 
@@ -123,42 +122,10 @@ func (block *Block) CalcBlockSubsidy() uint64 {
 	return uint64(0x200000000000) >> ((block.Msg.Header.Height - 1) / 0x40000)
 }
 
-func BitsToBig(bits uint32) *big.Int {
-	mantissa := int64(bits & 0x00ffffff)
-	exponent := uint(bits >> 24)
-
-	if exponent <= 3 {
-		mantissa >>= 8 * (3 - exponent)
-		return big.NewInt(mantissa)
-	}
-
-	target := big.NewInt(mantissa)
-	return target.Lsh(target, 8*(exponent-3))
-}
-
-func BigToBits(target *big.Int) uint32 {
-	var mantissa uint32
-	exponent := uint(len(target.Bytes()))
-
-	if exponent <= 3 {
-		mantissa = uint32(target.Bits()[0])
-		mantissa <<= 8 * (3 - exponent)
-	} else {
-		targetCopy := new(big.Int).Set(target)
-		mantissa = uint32(targetCopy.Rsh(targetCopy, 8*(exponent-3)).Bits()[0])
-	}
-
-	return uint32(exponent<<24) | mantissa
-}
-
-func HashToBig(hash *utils.Hash) *big.Int {
-	return new(big.Int).SetBytes(hash[:])
-}
-
 func CheckProofOfWork(header *network.BlockHeader) bool {
-	target := BitsToBig(header.Bits)
+	target := utils.BitsToBig(header.Bits)
 
-	hash := HashToBig(header.Hash())
+	hash := utils.HashToBig(header.Hash())
 	if hash.Cmp(target) > 0 {
 		return false
 	}

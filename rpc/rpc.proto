@@ -6,6 +6,7 @@ service Node {
   rpc GetBlock (GetBlockRequest) returns (GetBlockReply) {}
   rpc GetBestBlockHash (GetBestBlockHashRequest) returns (GetBestBlockHashReply) {}
   rpc PublishTx (PublishTxRequest) returns (PublishTxReply) {}
+  rpc PublishBlock (PublishBlockRequest) returns (PublishBlockReply) {}
   rpc ListenIncomingTxs (ListenIncomingTxsRequest) returns (stream TxWithBlock) {}
 }
 
@@ -70,6 +71,14 @@ message PublishTxRequest {
 message PublishTxReply {
   Error error = 1;
   string hash = 2;
+}
+
+message PublishBlockRequest() {
+  bytes block = 1;
+}
+
+message PublishBlockReply() {
+  string hash = 1;
 }
 
 message ListenIncomingTxsRequest {

@@ -40,6 +40,14 @@ func NewMempool(config *Config) *Mempool {
 	}
 }
 
+func (mempool *Mempool) Start() error {
+	return nil
+}
+
+func (mempool *Mempool) Stop() error {
+	return nil
+}
+
 func (mempool *Mempool) FetchTxs() []*blockchain.Tx {
 	mempool.mutex.RLock()
 	defer mempool.mutex.RUnlock()
@@ -192,12 +200,11 @@ func (mempool *Mempool) processOrphans(tx *blockchain.Tx) []*utils.Hash {
 	return acceptedTxs
 }
 
-func (mempool *Mempool) ProcessOrphans(tx *blockchain.Tx) {
+func (mempool *Mempool) ProcessOrphans(tx *blockchain.Tx) []*utils.Hash {
 	mempool.mutex.Lock()
+	defer mempool.mutex.Unlock()
 
-	mempool.processOrphans(tx)
-
-	mempool.mutex.Unlock()
+	return mempool.processOrphans(tx)
 }
 
 func (mempool *Mempool) processTx(tx *blockchain.Tx) []*utils.Hash {

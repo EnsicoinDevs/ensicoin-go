@@ -17,38 +17,52 @@ import (
 	"sync"
 )
 
+type ValidationError struct {
+	Reason string
+}
+
+func (err *ValidationError) Error() string {
+	return "block invalid: " + err.Reason
+}
+
+type Config struct {
+	OnPushedBlock func(*Block) error
+	OnPoppedBlock func(*Block) error
+}
+
+type BlockchainStats struct {
+	BestBlockHash   utils.Hash
+	BestBlockHeight uint32
+}
+
 type Blockchain struct {
+	config Config
+
 	db *bolt.DB
 
 	GenesisBlock *Block
 
-	Index *BlockIndex
-
 	lock *sync.RWMutex
+
+	stats *BlockchainStats
 
 	orphans           map[utils.Hash]*Block
 	prevHashToOrphans map[utils.Hash][]utils.Hash
-
-	PoppedBlocks chan *Block
-	PushedBlocks chan *Block
+	cache             map[utils.Hash]*network.BlockHeader
 }
 
 func NewBlockchain() *Blockchain {
-	blockchain := &Blockchain{
+	return &Blockchain{
 		GenesisBlock: &genesisBlock,
 
 		lock: &sync.RWMutex{},
 
+		stats: &BlockchainStats{},
+
 		orphans:           make(map[utils.Hash]*Block),
 		prevHashToOrphans: make(map[utils.Hash][]utils.Hash),
-
-		PoppedBlocks: make(chan *Block),
-		PushedBlocks: make(chan *Block),
+		cache:             make(map[utils.Hash]*network.BlockHeader),
 	}
-
-	blockchain.Index = NewBlockIndex(blockchain)
-
-	return blockchain
 }
 
 var (
@@ -86,9 +100,13 @@ func (blockchain *Blockchain) Load() error {
 			return errors.Wrap(err, "error creating the stats bucket")
 		}
 
-		longestChainInDb := b.Get([]byte("longestChain"))
-		if longestChainInDb == nil {
-			b.Put([]byte("longestChain"), genesisBlock.Hash()[:])
+		bestBlockHashInDb := b.Get([]byte("bestBlockHash"))
+		if bestBlockHashInDb == nil {
+			b.Put([]byte("bestBlockHash"), genesisBlock.Hash()[:])
+			b.Put([]byte("bestBlockHeight"), []byte{0, 0, 0, 0})
+		} else {
+			blockchain.stats.BestBlockHash = *utils.NewHash(bestBlockHashInDb)
+			blockchain.stats.BestBlockHeight = binary.BigEndian.Uint32(b.Get([]byte("bestBlockHeight")))
 		}
 
 		_, err = tx.CreateBucketIfNotExists(heightsBucket)
@@ -248,32 +266,57 @@ func (blockchain *Blockchain) FindBlockByHash(hash *utils.Hash) (*Block, error) 
 	return blockchain.findBlockByHash(hash)
 }
 
-func (blockchain *Blockchain) findLongestChain() (*Block, error) {
-	var longestChainHash *utils.Hash
+func (blockchain *Blockchain) findBlockHeaderByHash(hash *utils.Hash) (*network.BlockHeader, error) {
+	header, ok := blockchain.cache[*hash]
+	if ok {
+		return header, nil
+	}
+
+	block, err := blockchain.findBlockByHash(hash)
+	if err != nil {
+		return nil, err
+	}
+
+	header = block.Msg.Header
+
+	blockchain.cache[*hash] = header
+
+	return header, nil
+}
+
+func (blockchain *Blockchain) FindBlockHeaderByHash(hash *utils.Hash) (*network.BlockHeader, error) {
+	blockchain.lock.RLock()
+	defer blockchain.lock.RUnlock()
+
+	return blockchain.findBlockHeaderByHash(hash)
+}
+
+func (blockchain *Blockchain) findBestBlock() (*Block, error) {
+	var bestBlockHash *utils.Hash
 
 	err := blockchain.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(statsBucket)
-		longestChainHash = utils.NewHash(b.Get([]byte("longestChain")))
+		bestBlockHash = utils.NewHash(b.Get([]byte("bestBlockHash")))
 
 		return nil
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "error finding the longest chain hash")
+		return nil, errors.Wrap(err, "error finding the best block hash")
 	}
 
-	block, err := blockchain.findBlockByHash(longestChainHash)
+	block, err := blockchain.findBlockByHash(bestBlockHash)
 	if err != nil {
-		return nil, errors.Wrap(err, "error finding the longest chain")
+		return nil, errors.Wrap(err, "error finding the best block")
 	}
 
 	return block, nil
 }
 
-func (blockchain *Blockchain) FindLongestChain() (*Block, error) {
+func (blockchain *Blockchain) FindBestBlock() (*Block, error) {
 	blockchain.lock.RLock()
 	defer blockchain.lock.RUnlock()
 
-	return blockchain.findLongestChain()
+	return blockchain.findBestBlock()
 }
 
 func (blockchain *Blockchain) findBlockHashesStartingAt(hash *utils.Hash) ([]*utils.Hash, error) {
@@ -309,31 +352,47 @@ func (blockchain *Blockchain) FindBlockHashesStartingAt(hash *utils.Hash) ([]*ut
 	return blockchain.findBlockHashesStartingAt(hash)
 }
 
-func (blockchain *Blockchain) calcNextBlockDifficulty(block *BlockIndexEntry, nextBlock *Block) (uint32, error) {
-	if nextBlock.Msg.Header.Height < consensus.BLOCKS_PER_RETARGET {
-		return block.bits, nil
+func (blockchain *Blockchain) findAncestorHeader(block *Block, nth uint32) (*network.BlockHeader, error) {
+	current := block.Msg.Header
+	targetHeight := block.Msg.Header.Height - nth
+
+	var err error
+
+	for current.Height != targetHeight {
+		current, err = blockchain.findBlockHeaderByHash(current.HashPrevBlock) // TODO: maybe there is a race condition here
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	lastRetargetBlockEntry, err := blockchain.Index.findAncestor(nextBlock, nextBlock.Msg.Header.Height-consensus.BLOCKS_PER_RETARGET)
+	return current, nil
+}
+
+func (blockchain *Blockchain) calcNextBlockDifficulty(block *Block, nextBlock *Block) (uint32, error) {
+	if nextBlock.Msg.Header.Height < consensus.BLOCKS_PER_RETARGET {
+		return block.Msg.Header.Bits, nil
+	}
+
+	lastRetargetBlockHeader, err := blockchain.findAncestorHeader(nextBlock, consensus.BLOCKS_PER_RETARGET)
 	if err != nil {
 		return 0, err
 	}
 
-	realizedTimespan := uint64(nextBlock.Msg.Header.Timestamp.Unix()) - uint64(lastRetargetBlockEntry.timestamp.Unix())
+	realizedTimespan := uint64(nextBlock.Msg.Header.Timestamp.Unix() - lastRetargetBlockHeader.Timestamp.Unix())
 	if realizedTimespan < consensus.MIN_RETARGET_TIMESPAN {
 		realizedTimespan = consensus.MIN_RETARGET_TIMESPAN
 	} else if realizedTimespan > consensus.MAX_RETARGET_TIMESPAN {
 		realizedTimespan = consensus.MAX_RETARGET_TIMESPAN
 	}
 
-	targetBefore := BitsToBig(block.bits)
+	targetBefore := utils.BitsToBig(block.Msg.Header.Bits)
 	target := new(big.Int).Mul(targetBefore, big.NewInt(int64(realizedTimespan)))
 	target.Div(target, big.NewInt(consensus.BLOCKS_MEAN_TIMESPAN*consensus.BLOCKS_PER_RETARGET))
 
-	return BigToBits(target), nil
+	return utils.BigToBits(target), nil
 }
 
-func (blockchain *Blockchain) CalcNextBlockDifficulty(block *BlockIndexEntry, nextBlock *Block) (uint32, error) {
+func (blockchain *Blockchain) CalcNextBlockDifficulty(block *Block, nextBlock *Block) (uint32, error) {
 	blockchain.lock.RLock()
 	defer blockchain.lock.RUnlock()
 
@@ -341,8 +400,8 @@ func (blockchain *Blockchain) CalcNextBlockDifficulty(block *BlockIndexEntry, ne
 }
 
 func (blockchain *Blockchain) validateBlock(block *Block) (error, error) {
-	parentBlock, err := blockchain.Index.findBlock(block.Msg.Header.HashPrevBlock)
-	if parentBlock.height+1 != block.Msg.Header.Height {
+	parentBlock, err := blockchain.findBlockByHash(block.Msg.Header.HashPrevBlock)
+	if parentBlock.Msg.Header.Height+1 != block.Msg.Header.Height {
 		return errors.New("height is not equal to the previous block height + 1"), nil
 	}
 
@@ -597,7 +656,7 @@ func (blockchain *Blockchain) GetBlockHashAtHeight(height uint32) (*utils.Hash, 
 }
 
 func (blockchain *Blockchain) pushBlock(block *Block) error {
-	longestChain, err := blockchain.findLongestChain()
+	longestChain, err := blockchain.findBestBlock()
 	if err != nil {
 		return err
 	}
@@ -667,13 +726,13 @@ func (blockchain *Blockchain) pushBlock(block *Block) error {
 		return err
 	}
 
-	blockchain.PushedBlocks <- block
+	blockchain.config.OnPushedBlock(block)
 
 	return nil
 }
 
 func (blockchain *Blockchain) popBlock(block *Block) error {
-	longestChain, err := blockchain.findLongestChain()
+	longestChain, err := blockchain.findBestBlock()
 	if err != nil {
 		return err
 	}
@@ -739,7 +798,7 @@ func (blockchain *Blockchain) popBlock(block *Block) error {
 		return err
 	}
 
-	blockchain.PoppedBlocks <- block
+	blockchain.config.OnPoppedBlock(block)
 
 	return nil
 }
@@ -750,18 +809,24 @@ func (blockchain *Blockchain) acceptBlock(block *Block) (bool, error) {
 		return false, err
 	}
 
-	longestChain, err := blockchain.findLongestChain()
+	bestBlock, err := blockchain.findBestBlock()
 	if err != nil {
 		return false, err
 	}
 
-	if longestChain.Hash().IsEqual(block.Msg.Header.HashPrevBlock) {
+	if bestBlock.Hash().IsEqual(block.Msg.Header.HashPrevBlock) {
 		err = blockchain.pushBlock(block)
 		if err != nil {
 			return false, err
 		}
 
 		return true, nil
+	}
+
+	var workSum uint32
+	currentBlock := bestBlock
+	for ; !currentBlock.Msg.Header.HashPrevBlock.IsEqual(block.Msg.Header.HashPrevBlock); blockchain.FindBlockByHash(currentBlock.Msg.Header.HashPrevBlock) {
+		workSum += currentBlock.Msg.Header.Bits
 	}
 
 	return true, nil
@@ -826,12 +891,12 @@ func (blockchain *Blockchain) ProcessBlock(block *Block) (error, error) {
 	blockchain.lock.Lock()
 	defer blockchain.lock.Unlock()
 
-	entry, err := blockchain.Index.findBlock(block.Hash())
+	header, err := blockchain.findBlockHeaderByHash(block.Hash())
 	if err != nil {
 		return nil, err
 	}
-	if entry != nil {
-		return errors.New("a block with the same hash exist"), nil
+	if header != nil {
+		return &ValidationError{"a block with the same hash exist"}, nil
 	}
 
 	orphanBlock, err := blockchain.findOrphan(block.Hash())
@@ -839,18 +904,18 @@ func (blockchain *Blockchain) ProcessBlock(block *Block) (error, error) {
 		return nil, nil
 	}
 	if orphanBlock != nil {
-		return errors.New("an orphan block with the same hash exist"), nil
+		return &ValidationError{"an orphan block with the same hash exist"}, nil
 	}
 
 	if valid := block.IsSane(); valid != nil {
 		return errors.Wrap(valid, "the block is not sane"), nil
 	}
 
-	entry, err = blockchain.Index.findBlock(block.Msg.Header.HashPrevBlock)
+	header, err = blockchain.findBlockHeaderByHash(block.Msg.Header.HashPrevBlock)
 	if err != nil {
 		return nil, err
 	}
-	if entry == nil {
+	if header == nil {
 		log.WithField("hash", hex.EncodeToString(block.Msg.Header.Hash()[:])).Info("accepted orphan block")
 
 		blockchain.addOrphan(block)

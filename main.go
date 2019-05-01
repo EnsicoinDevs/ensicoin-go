@@ -2,10 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/EnsicoinDevs/ensicoincoin/blockchain"
 	"github.com/EnsicoinDevs/ensicoincoin/consensus"
-	"github.com/EnsicoinDevs/ensicoincoin/mempool"
-	"github.com/EnsicoinDevs/ensicoincoin/miner"
 	"github.com/c-bata/go-prompt"
 	homedir "github.com/mitchellh/go-homedir"
 	log "github.com/sirupsen/logrus"
@@ -122,42 +119,13 @@ func launch() {
 
 	log.Info("EnsiCoinCoin is starting")
 
-	blockchain := blockchain.NewBlockchain()
-	blockchain.Load()
-
-	rpcServer := newRpcServer(blockchain, server)
-
-	mempool := mempool.NewMempool(&mempool.Config{
-		FetchUtxos:   blockchain.FetchUtxos,
-		OnAcceptedTx: rpcServer.HandleAcceptedTx,
-	})
-
-	bestBlock, err := blockchain.FindLongestChain()
-	if err != nil {
-		log.WithError(err).Error("error finding the best block")
-	}
-
-	miner := &miner.Miner{
-		Config:     &miner.Config{},
-		BestBlock:  bestBlock,
-		Blockchain: blockchain,
-		Mempool:    mempool,
-	}
-
-	server = NewServer(blockchain, mempool, miner, rpcServer)
+	server = NewServer()
 
 	go server.Start()
 
 	if viper.GetString("token") != "" {
 		startDiscordBootstraping(server)
 	}
-
-	if viper.GetBool("mining") {
-		miner.Start()
-	}
-
-	rpcServer.server = server
-	go rpcServer.Start()
 
 	log.Info("EnsiCoinCoin is running")
 
@@ -167,11 +135,10 @@ func launch() {
 	}
 
 	stop = func() {
-		if viper.GetBool("mining") {
-			miner.Stop()
+		err := server.Stop()
+		if err != nil {
+			log.WithError(err).Error("error stopping the server")
 		}
-
-		server.Stop()
 	}
 
 	p := prompt.New(

@@ -167,7 +167,7 @@ func (s *rpcServer) GetBlock(ctx context.Context, in *pb.GetBlockRequest) (*pb.G
 }
 
 func (s *rpcServer) GetBestBlockHash(ctx context.Context, in *pb.GetBestBlockHashRequest) (*pb.GetBestBlockHashReply, error) {
-	block, err := s.blockchain.FindLongestChain()
+	block, err := s.blockchain.FindBestBlock()
 	if err != nil {
 		return nil, err
 	}
