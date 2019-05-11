@@ -45,6 +45,9 @@ func (mempool *Mempool) Start() error {
 }
 
 func (mempool *Mempool) Stop() error {
+	log.Debug("mempool shutting down")
+	defer log.Debug("mempool shtdown complete")
+
 	return nil
 }
 

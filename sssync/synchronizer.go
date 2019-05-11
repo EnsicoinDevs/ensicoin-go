@@ -45,6 +45,11 @@ func (sync *Synchronizer) Start() error {
 }
 
 func (sync *Synchronizer) Stop() error {
+	log.Debug("sssync shutting down")
+	defer log.Debug("sssync shutdown complete")
+
+	close(sync.quit)
+
 	return nil
 }
 

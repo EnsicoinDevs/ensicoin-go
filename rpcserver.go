@@ -77,7 +77,8 @@ type txWithBlock struct {
 }
 
 type rpcServer struct {
-	server *Server
+	server     *Server
+	grpcServer *grpc.Server
 
 	acceptedTxs chan txWithBlock
 
@@ -117,18 +118,20 @@ func newRpcServer(server *Server) *rpcServer {
 }
 
 func (s *rpcServer) Start() error {
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", viper.GetInt("port")+1))
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", viper.GetInt("rpcport")))
 	if err != nil {
 		return err
 	}
 
-	grpcServer := grpc.NewServer()
+	s.grpcServer = grpc.NewServer()
 
-	pb.RegisterNodeServer(grpcServer, s)
+	pb.RegisterNodeServer(s.grpcServer, s)
 
 	go s.startAcceptedTxsHandler()
 
-	if err := grpcServer.Serve(listener); err != nil {
+	log.Infof("rpc server listening on :%d", viper.GetInt("rpcport"))
+
+	if err := s.grpcServer.Serve(listener); err != nil {
 		return err
 	}
 
@@ -136,7 +139,13 @@ func (s *rpcServer) Start() error {
 }
 
 func (s *rpcServer) Stop() error {
+	log.Debug("rpc server shutting down")
+	defer log.Debug("rpc server shutdown complete")
+
+	s.grpcServer.GracefulStop()
+
 	close(s.quit)
+
 	return nil
 }
 

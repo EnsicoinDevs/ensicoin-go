@@ -37,6 +37,7 @@ func NewServer() *Server {
 	}
 
 	server.blockchain = blockchain.NewBlockchain(&blockchain.Config{
+		DataDir:       viper.GetString("datadir"),
 		OnPushedBlock: server.OnPushedBlock,
 		OnPoppedBlock: server.OnPoppedBlock,
 	})
@@ -55,24 +56,6 @@ func NewServer() *Server {
 	return server
 }
 
-func (server *Server) OnPushedBlock(block *blockchain.Block) error {
-	err := server.synchronizer.OnPushedBlock(block)
-	if err != nil {
-		return err
-	}
-
-	return server.rpcServer.OnPushedBlock(block)
-}
-
-func (server *Server) OnPoppedBlock(block *blockchain.Block) error {
-	err := server.synchronizer.OnPoppedBlock(block)
-	if err != nil {
-		return err
-	}
-
-	return server.rpcServer.OnPushedBlock(block)
-}
-
 func (server *Server) Start() {
 	go server.blockchain.Load()
 	go server.mempool.Start()
@@ -86,10 +69,15 @@ func (server *Server) Start() {
 		log.WithError(err).Panic("error launching the tcp server")
 	}
 
+	log.Infof("server listening on :%d", viper.GetInt("port"))
+
 	for {
 		conn, err := server.listener.Accept()
 		if err != nil {
-			log.WithError(err).Error("error accepting a new connection")
+			if !server.IsStopping() {
+				log.WithError(err).Error("error accepting a new connection")
+			}
+
 			return
 		} else {
 			log.Info("we have a new ingoing peer")
@@ -108,25 +96,53 @@ func (server *Server) Start() {
 }
 
 func (server *Server) Stop() error {
-	log.Debug("stopping rpc server")
+	log.Debug("server shutting down")
+	defer log.Debug("server shutdown complete")
+
 	err := server.rpcServer.Stop()
 	if err != nil {
 		return err
 	}
 
-	log.Debug("stopping server")
 	close(server.quit)
 
 	server.listener.Close()
 
-	log.Debug("stopping synchronizer")
 	err = server.synchronizer.Stop()
 	if err != nil {
 		return err
 	}
 
-	log.Debug("stopping mempool")
-	return server.mempool.Stop()
+	err = server.mempool.Stop()
+	if err != nil {
+		return err
+	}
+
+	return server.blockchain.Stop()
+}
+
+func (server *Server) IsStopping() bool {
+	_, ok := <-server.quit
+
+	return !ok
+}
+
+func (server *Server) OnPushedBlock(block *blockchain.Block) error {
+	err := server.synchronizer.OnPushedBlock(block)
+	if err != nil {
+		return err
+	}
+
+	return server.rpcServer.OnPushedBlock(block)
+}
+
+func (server *Server) OnPoppedBlock(block *blockchain.Block) error {
+	err := server.synchronizer.OnPoppedBlock(block)
+	if err != nil {
+		return err
+	}
+
+	return server.rpcServer.OnPushedBlock(block)
 }
 
 func (server *Server) ConnectTo(address string) error {

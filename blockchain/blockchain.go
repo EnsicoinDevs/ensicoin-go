@@ -10,8 +10,8 @@ import (
 	bolt "github.com/etcd-io/bbolt"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-	"github.com/spf13/viper"
 	"math/big"
+	"path/filepath"
 	"strconv"
 	"sync"
 )
@@ -25,6 +25,7 @@ func (err *ValidationError) Error() string {
 }
 
 type Config struct {
+	DataDir       string
 	OnPushedBlock func(*Block) error
 	OnPoppedBlock func(*Block) error
 }
@@ -78,7 +79,7 @@ var (
 func (blockchain *Blockchain) Load() error {
 	var err error
 
-	blockchain.db, err = bolt.Open(viper.GetString("datadir")+"blockchain.db", 0600, nil)
+	blockchain.db, err = bolt.Open(filepath.Join(blockchain.config.DataDir, "data.db"), 0600, nil)
 	if err != nil {
 		return errors.Wrap(err, "error opening the blockchain database")
 	}
@@ -138,6 +139,13 @@ func (blockchain *Blockchain) Load() error {
 	}
 
 	return nil
+}
+
+func (blockchain *Blockchain) Stop() error {
+	log.Debug("blockchain shutting down")
+	defer log.Debug("blockchain shutdown complete")
+
+	return blockchain.db.Close()
 }
 
 func (blockchain *Blockchain) fetchUtxos(tx *Tx) (*Utxos, []*network.Outpoint, error) {

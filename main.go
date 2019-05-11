@@ -1,29 +1,26 @@
 package main
 
 import (
-	"fmt"
 	"github.com/EnsicoinDevs/ensicoincoin/consensus"
-	"github.com/c-bata/go-prompt"
-	homedir "github.com/mitchellh/go-homedir"
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	"net/http"
-	_ "net/http/pprof"
 	"os"
-	"strings"
+	"path/filepath"
+	"runtime"
 )
 
 var (
-	stop   func()
 	server *Server
 )
 
 func init() {
 	pflag.IntP("port", "p", consensus.INGOING_PORT, "listening port")
-	pflag.StringP("cfgfile", "c", "", "config file")
-	pflag.StringP("datadir", "d", "", "data dir")
+	pflag.Int("rpcport", consensus.INGOING_PORT+1, "rpc listening port")
+	pflag.StringP("cfgdir", "c", getAppConfigDir(), "config directory")
+	pflag.StringP("datadir", "d", getAppDataDir(), "data directory")
 	pflag.StringP("token", "t", "", "a discord token")
 	pflag.BoolP("mining", "m", false, "enable mining")
 	pflag.BoolP("interactive", "i", false, "enable prompt")
@@ -34,122 +31,109 @@ func init() {
 	cobra.OnInitialize(initConfig)
 }
 
+func generateConfig() error {
+	f, err := os.Create(filepath.Join(viper.GetString("cfgdir"), "config.yaml"))
+	if err != nil {
+		return err
+	}
+
+	_ = f
+
+	return nil
+}
+
 func initConfig() {
-	if viper.GetString("cfgfile") != "" {
-		viper.SetConfigFile(viper.GetString("cfgfile"))
-	} else {
-		viper.SetConfigName("ensicoincoin")
+	viper.SetConfigName("config")
 
-		home, err := homedir.Dir()
-		if err != nil {
-			log.WithError(err).Fatal("damned")
+	viper.AddConfigPath(viper.GetString("cfgdir"))
+
+	stat, err := os.Stat(viper.GetString("cfgdir"))
+	if os.IsNotExist(err) {
+		os.MkdirAll(viper.GetString("cfgdir"), os.ModePerm)
+		if err = generateConfig(); err != nil {
+			log.WithError(err).Fatal("fatal error generating the configuration file")
+			os.Exit(1)
 		}
-
-		viper.AddConfigPath(home + "/.config/ensicoincoin/")
-		viper.AddConfigPath(home)
+	} else if err != nil {
+		log.WithError(err).Fatal("fatal error checking if the configuration directory exists")
+		os.Exit(1)
+	} else if !stat.IsDir() {
+		log.Fatal("the configuration directory is not a directory")
+		os.Exit(1)
 	}
 
 	if err := viper.ReadInConfig(); err != nil {
-		log.WithError(err).Error("can't read config")
+		if _, ok := err.(*viper.ConfigFileNotFoundError); ok {
+			if err = generateConfig(); err != nil {
+				log.WithError(err).Fatal("fatal error generating the configuration file")
+				os.Exit(1)
+			}
+
+			if err = viper.ReadInConfig(); err != nil {
+				log.WithError(err).Fatal("fatal error reading the configuration")
+			}
+		} else {
+			log.WithError(err).Fatal("fatal error reading the configuration")
+		}
 	}
 }
 
 var rootCmd = &cobra.Command{
 	Use:   "ensicoincoin",
 	Short: "EnsiCoinCoin is a questionable implementation of the Ensicoin protocol",
-	Long:  `EnsiCoinCoin is a questionable implementation of the Ensicoin protocol. It is a demon that allows you to synchronize with the blockchain.`,
+	Long:  `EnsiCoinCoin is a questionable implementation of the Ensicoin protocol. It is a daemon that allows you to synchronize with the blockchain.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		pflag.Parse()
 
-		launch()
+		if err := launch(); err != nil {
+			os.Exit(1)
+		}
 	},
 }
 
 func main() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
 	if err := rootCmd.Execute(); err != nil {
-		log.WithError(err).Fatal("damned")
+		os.Exit(1)
 	}
 }
 
-func executor(in string) {
-	c := strings.Split(in, " ")
-
-	switch c[0] {
-	case "connect":
-		if len(c) < 2 {
-			fmt.Println("Please specify the node address.")
-			return
-		}
-
-		if err := server.ConnectTo(c[1]); err != nil {
-			fmt.Println("Error connecting to " + c[1] + ": " + err.Error())
-			return
-		}
-
-		fmt.Println("Connected.")
-	case "exit":
-		stop()
-		fmt.Println("Good bye.")
-		os.Exit(0)
-	default:
-		fmt.Println("Command not found. Type help to get the list of commands.")
-	}
-}
-
-func completer(in prompt.Document) []prompt.Suggest {
-	s := []prompt.Suggest{
-		{Text: "connect", Description: "Connect to an ensicoincoin node"},
-		{Text: "exit", Description: "Exit the node"},
-	}
-
-	return prompt.FilterHasPrefix(s, in.GetWordBeforeCursor(), true)
-}
-
-func launch() {
+func launch() error {
 	log.SetLevel(log.DebugLevel)
 
-	if viper.GetBool("pprof") {
-		log.Debug("?")
+	interruptListener := newInterruptListener()
+	defer log.Info("shutdown complete")
 
-		go func() {
-			log.Debug("pprof")
-			log.Debug(http.ListenAndServe("localhost:6060", nil))
-		}()
+	if err := checkDataDir(); err != nil {
+		log.WithError(err).Fatal("fatal error checking the data dir")
+		os.Exit(1)
 	}
 
-	log.Info("EnsiCoinCoin is starting")
+	log.Info("version 0.0.0")
+	log.WithField("cfgdir", viper.GetString("cfgdir")).Info("configuration directory is")
+	log.WithField("datadir", viper.GetString("datadir")).Info("data directory is")
 
 	server = NewServer()
-
 	go server.Start()
+	defer func() {
+		log.Info("gracefully shutting down")
+		server.Stop()
+	}()
 
-	if viper.GetString("token") != "" {
-		startDiscordBootstraping(server)
+	<-interruptListener
+	return nil
+}
+
+func checkDataDir() error {
+	stat, err := os.Stat(viper.GetString("datadir"))
+	if os.IsNotExist(err) {
+		os.MkdirAll(viper.GetString("datadir"), os.ModePerm)
+	} else if err != nil {
+		return err
+	} else if !stat.IsDir() {
+		return errors.Wrap(err, "the data directory is not a directory")
 	}
 
-	log.Info("EnsiCoinCoin is running")
-
-	if !viper.GetBool("interactive") {
-		ch := make(chan bool)
-		<-ch
-	}
-
-	stop = func() {
-		err := server.Stop()
-		if err != nil {
-			log.WithError(err).Error("error stopping the server")
-		}
-	}
-
-	p := prompt.New(
-		executor,
-		completer,
-		prompt.OptionPrefix(">>> "),
-	)
-
-	p.Run()
-
-	stop()
-
-	log.Info("Good bye.")
+	return nil
 }
