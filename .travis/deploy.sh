@@ -9,8 +9,7 @@ git remote add deploy ssh://$GITUSER@$IP:$PORT$DEPLOY_DIR
 git push deploy master
 
 ssh -tt $GITUSER@$IP -p $PORT <<EOF
-	cd $DEPLOY_DIR
-	go install
+	go get -u github.com/EnsicoinDevs/eccd
 	sudo systemctl restart eccd.service
 	exit
 EOF

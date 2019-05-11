@@ -21,10 +21,6 @@ func init() {
 	pflag.Int("rpcport", consensus.INGOING_PORT+1, "rpc listening port")
 	pflag.StringP("cfgdir", "c", getAppConfigDir(), "config directory")
 	pflag.StringP("datadir", "d", getAppDataDir(), "data directory")
-	pflag.StringP("token", "t", "", "a discord token")
-	pflag.BoolP("mining", "m", false, "enable mining")
-	pflag.BoolP("interactive", "i", false, "enable prompt")
-	pflag.BoolP("pprof", "P", false, "enable pprof")
 
 	viper.BindPFlags(pflag.CommandLine)
 
