@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/hex"
 	"reflect"
 )
 
@@ -16,4 +17,8 @@ func NewHash(src []byte) *Hash {
 
 func (hash *Hash) IsEqual(otherHash *Hash) bool {
 	return reflect.DeepEqual(hash, otherHash)
+}
+
+func (hash *Hash) String() string {
+	return hex.EncodeToString(hash[:])
 }

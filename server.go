@@ -36,9 +36,12 @@ func NewServer() *Server {
 		quit: make(chan struct{}),
 	}
 
-	server.blockchain = blockchain.NewBlockchain()
+	server.blockchain = blockchain.NewBlockchain(&blockchain.Config{
+		OnPushedBlock: server.OnPushedBlock,
+		OnPoppedBlock: server.OnPoppedBlock,
+	})
 
-	server.rpcServer = newRpcServer(server.blockchain, server)
+	server.rpcServer = newRpcServer(server)
 
 	server.mempool = mempool.NewMempool(&mempool.Config{
 		FetchUtxos:   server.blockchain.FetchUtxos,
@@ -46,11 +49,28 @@ func NewServer() *Server {
 	})
 
 	server.synchronizer = sssync.NewSynchronizer(&sssync.Config{
-		Broadcast:       server.Broadcast,
-		OnAcceptedBlock: server.rpcServer.HandleAcceptedBlock,
+		Broadcast: server.Broadcast,
 	}, server.blockchain, server.mempool)
 
 	return server
+}
+
+func (server *Server) OnPushedBlock(block *blockchain.Block) error {
+	err := server.synchronizer.OnPushedBlock(block)
+	if err != nil {
+		return err
+	}
+
+	return server.rpcServer.OnPushedBlock(block)
+}
+
+func (server *Server) OnPoppedBlock(block *blockchain.Block) error {
+	err := server.synchronizer.OnPoppedBlock(block)
+	if err != nil {
+		return err
+	}
+
+	return server.rpcServer.OnPushedBlock(block)
 }
 
 func (server *Server) Start() {
@@ -182,11 +202,6 @@ func (server *Server) onInv(peer *peer.Peer, message *network.InvMessage) {
 }
 
 func (server *Server) onBlock(peer *peer.Peer, message *network.BlockMessage) {
-	log.WithFields(log.Fields{
-		"hash":   hex.EncodeToString(message.Header.Hash()[:]),
-		"height": message.Header.Height,
-	}).Info("received a block")
-
 	server.synchronizer.HandleBlock(peer, message)
 }
 
@@ -247,7 +262,7 @@ func (server *Server) onGetBlocks(peer *peer.Peer, message *network.GetBlocksMes
 	}
 
 	if startAt == nil {
-		startAt = server.blockchain.GenesisBlock.Hash()
+		return
 	}
 
 	var inventory []*network.InvVect

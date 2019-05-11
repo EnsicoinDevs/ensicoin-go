@@ -137,7 +137,7 @@ func writeBlockHeader(writer io.Writer, header *BlockHeader) error {
 }
 
 func (header *BlockHeader) Hash() *utils.Hash {
-	buf := bytes.NewBuffer(make([]byte, 232))
+	buf := bytes.NewBuffer(nil)
 	_ = writeBlockHeader(buf, header)
 
 	hash := utils.Hash(sha256.Sum256(buf.Bytes()))

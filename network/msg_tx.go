@@ -14,7 +14,7 @@ type Outpoint struct {
 }
 
 func (outpoint *Outpoint) MarshalBinary() ([]byte, error) {
-	buf := bytes.NewBuffer(make([]byte, 0, 36))
+	buf := bytes.NewBuffer(nil)
 
 	err := WriteHash(buf, &outpoint.Hash)
 	if err != nil {
@@ -279,7 +279,7 @@ func (msg *TxMessage) Encode(writer io.Writer) error {
 }
 
 func (msg *TxMessage) Hash() *utils.Hash {
-	buf := bytes.NewBuffer(make([]byte, 0, 7))
+	buf := bytes.NewBuffer(nil)
 	_ = msg.Encode(buf)
 
 	hash := utils.Hash(sha256.Sum256(buf.Bytes()))

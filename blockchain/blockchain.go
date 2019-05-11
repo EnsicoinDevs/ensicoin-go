@@ -3,7 +3,6 @@ package blockchain
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/hex"
 	"github.com/EnsicoinDevs/ensicoincoin/consensus"
 	"github.com/EnsicoinDevs/ensicoincoin/network"
 	"github.com/EnsicoinDevs/ensicoincoin/scripts"
@@ -51,8 +50,10 @@ type Blockchain struct {
 	cache             map[utils.Hash]*network.BlockHeader
 }
 
-func NewBlockchain() *Blockchain {
+func NewBlockchain(config *Config) *Blockchain {
 	return &Blockchain{
+		config: *config,
+
 		GenesisBlock: &genesisBlock,
 
 		lock: &sync.RWMutex{},
@@ -275,6 +276,9 @@ func (blockchain *Blockchain) findBlockHeaderByHash(hash *utils.Hash) (*network.
 	block, err := blockchain.findBlockByHash(hash)
 	if err != nil {
 		return nil, err
+	}
+	if block == nil {
+		return nil, nil
 	}
 
 	header = block.Msg.Header
@@ -726,7 +730,9 @@ func (blockchain *Blockchain) pushBlock(block *Block) error {
 		return err
 	}
 
-	blockchain.config.OnPushedBlock(block)
+	if blockchain.config.OnPushedBlock != nil {
+		blockchain.config.OnPushedBlock(block)
+	}
 
 	return nil
 }
@@ -803,6 +809,41 @@ func (blockchain *Blockchain) popBlock(block *Block) error {
 	return nil
 }
 
+func (blockchain *Blockchain) findForkingBlock(blockA *Block, blockB *Block) (*Block, error) {
+	var err error
+
+	// If blockB height is superior to blockA height, we walk back to the blockA height
+	for blockB.Msg.Header.Height > blockA.Msg.Header.Height {
+		blockB, err = blockchain.findBlockByHash(blockB.Msg.Header.HashPrevBlock)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Same with blockA
+	for blockA.Msg.Header.Height > blockB.Msg.Header.Height {
+		blockA, err = blockchain.findBlockByHash(blockB.Msg.Header.HashPrevBlock)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// While the two blocks are different, we walk back of one block
+	for blockA != nil && !blockB.Hash().IsEqual(blockA.Hash()) {
+		blockA, err = blockchain.findBlockByHash(blockA.Msg.Header.HashPrevBlock)
+		if err != nil {
+			return nil, err
+		}
+
+		blockB, err = blockchain.findBlockByHash(blockB.Msg.Header.HashPrevBlock)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return blockA, nil
+}
+
 func (blockchain *Blockchain) acceptBlock(block *Block) (bool, error) {
 	err := blockchain.storeBlock(block)
 	if err != nil {
@@ -823,10 +864,12 @@ func (blockchain *Blockchain) acceptBlock(block *Block) (bool, error) {
 		return true, nil
 	}
 
-	var workSum uint32
-	currentBlock := bestBlock
-	for ; !currentBlock.Msg.Header.HashPrevBlock.IsEqual(block.Msg.Header.HashPrevBlock); blockchain.FindBlockByHash(currentBlock.Msg.Header.HashPrevBlock) {
-		workSum += currentBlock.Msg.Header.Bits
+	forkingBlock, err := blockchain.findForkingBlock(bestBlock, block)
+	if err != nil {
+		return false, err
+	}
+	if forkingBlock == nil {
+		return false, errors.New("can't find the forking block")
 	}
 
 	return true, nil
@@ -849,7 +892,6 @@ func (blockchain *Blockchain) processOrphans(acceptedBlock *Block) error {
 			return err
 		}
 		if valid != nil {
-			log.Info("orphan is not valid")
 			blockchain.removeOrphan(block.Hash())
 		}
 
@@ -916,7 +958,7 @@ func (blockchain *Blockchain) ProcessBlock(block *Block) (error, error) {
 		return nil, err
 	}
 	if header == nil {
-		log.WithField("hash", hex.EncodeToString(block.Msg.Header.Hash()[:])).Info("accepted orphan block")
+		log.WithField("hash", block.Msg.Header.Hash().String()).Info("accepted orphan block")
 
 		blockchain.addOrphan(block)
 

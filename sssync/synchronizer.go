@@ -12,15 +12,14 @@ import (
 )
 
 type Config struct {
-	Broadcast       func(network.Message) error
-	OnAcceptedBlock func(*blockchain.Block) error
+	Broadcast func(network.Message) error
 }
 
 type Synchronizer struct {
 	config Config
 
-	Blockchain *blockchain.Blockchain
-	Mempool    *mempool.Mempool
+	blockchain *blockchain.Blockchain
+	mempool    *mempool.Mempool
 
 	mutex             *sync.Mutex
 	synchronizingPeer *peer.Peer
@@ -32,8 +31,8 @@ func NewSynchronizer(config *Config, blockchain *blockchain.Blockchain, mempool 
 	return &Synchronizer{
 		config: *config,
 
-		Blockchain: blockchain,
-		Mempool:    mempool,
+		blockchain: blockchain,
+		mempool:    mempool,
 
 		mutex: &sync.Mutex{},
 
@@ -50,10 +49,20 @@ func (sync *Synchronizer) Stop() error {
 }
 
 func (sync *Synchronizer) OnPushedBlock(block *blockchain.Block) error {
+	log.WithFields(log.Fields{
+		"hash":   hex.EncodeToString(block.Msg.Header.Hash()[:]),
+		"height": block.Msg.Header.Height,
+	}).Info("block pushed")
+
 	return sync.handlePushedBlock(block)
 }
 
 func (sync *Synchronizer) OnPoppedBlock(block *blockchain.Block) error {
+	log.WithFields(log.Fields{
+		"hash":   hex.EncodeToString(block.Msg.Header.Hash()[:]),
+		"height": block.Msg.Header.Height,
+	}).Info("block popped")
+
 	return sync.handlePoppedBlock(block)
 }
 
@@ -62,7 +71,7 @@ func (sync *Synchronizer) HandleBlockInvVect(peer *peer.Peer, invVect *network.I
 		panic("the invtype of the invvect is not block")
 	}
 
-	block, err := sync.Blockchain.FindBlockByHash(invVect.Hash)
+	block, err := sync.blockchain.FindBlockByHash(invVect.Hash)
 	if err != nil {
 		return err
 	}
@@ -81,7 +90,7 @@ func (sync *Synchronizer) HandleBlock(peer *peer.Peer, message *network.BlockMes
 }
 
 func (sync *Synchronizer) ProcessBlock(message *network.BlockMessage) {
-	valid, err := sync.Blockchain.ProcessBlock(blockchain.NewBlockFromBlockMessage(message))
+	valid, err := sync.blockchain.ProcessBlock(blockchain.NewBlockFromBlockMessage(message))
 	if err != nil {
 		log.WithError(err).WithField("hash", hex.EncodeToString(message.Header.Hash()[:])).Error("error processing a block")
 		return
@@ -90,8 +99,6 @@ func (sync *Synchronizer) ProcessBlock(message *network.BlockMessage) {
 		log.WithField("hash", hex.EncodeToString(message.Header.Hash()[:])).WithField("error", valid).Info("processed an invalid block")
 		return
 	}
-
-	log.WithField("hash", hex.EncodeToString(message.Header.Hash()[:])).Info("processed a valid block")
 }
 
 func (sync *Synchronizer) HandleReadyPeer(peer *peer.Peer) {
@@ -115,7 +122,7 @@ func (sync *Synchronizer) HandleDisconnectedPeer(peer *peer.Peer) {
 }
 
 func (sync *Synchronizer) synchronize() {
-	bestBlock, err := sync.Blockchain.FindBestBlock()
+	bestBlock, err := sync.blockchain.FindBestBlock()
 	if err != nil {
 		log.WithError(err).Error("error finding the longest chain")
 		return
@@ -131,7 +138,7 @@ func (sync *Synchronizer) handlePushedBlock(block *blockchain.Block) error {
 	log.Debug("removing tx from mempool")
 
 	for _, tx := range block.Txs {
-		sync.Mempool.RemoveTx(tx)
+		sync.mempool.RemoveTx(tx)
 	}
 
 	log.Debug("broadcasting")
@@ -147,14 +154,12 @@ func (sync *Synchronizer) handlePushedBlock(block *blockchain.Block) error {
 
 	log.Debug("updtating best block")
 
-	sync.config.OnAcceptedBlock(block)
-
 	return nil
 }
 
 func (sync *Synchronizer) handlePoppedBlock(block *blockchain.Block) error {
 	for _, tx := range block.Txs {
-		sync.Mempool.ProcessTx(tx)
+		sync.mempool.ProcessTx(tx)
 	}
 
 	return nil

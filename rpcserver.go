@@ -14,7 +14,62 @@ import (
 	"google.golang.org/grpc"
 	"net"
 	"sync"
+	"time"
 )
+
+type NotificationType int
+
+const (
+	NOTIFICATION_PUSHED_BLOCK = iota
+	NOTIFICATION_POPPED_BLOCK
+)
+
+type Notification struct {
+	Type  NotificationType
+	Block *blockchain.Block
+}
+
+type Notifier struct {
+	mutex sync.RWMutex
+	chans map[chan *Notification]struct{}
+}
+
+func NewNotifier() *Notifier {
+	return &Notifier{
+		mutex: sync.RWMutex{},
+		chans: make(map[chan *Notification]struct{}),
+	}
+}
+
+func (n *Notifier) Subscribe() chan *Notification {
+	ch := make(chan *Notification)
+
+	n.mutex.Lock()
+	n.chans[ch] = struct{}{}
+	n.mutex.Unlock()
+
+	return ch
+}
+
+func (n *Notifier) Unsubscribe(ch chan *Notification) error {
+	n.mutex.Lock()
+	defer n.mutex.Unlock()
+
+	delete(n.chans, ch)
+
+	return nil
+}
+
+func (n *Notifier) Notify(notification *Notification) error {
+	n.mutex.RLock()
+	defer n.mutex.RUnlock()
+
+	for ch := range n.chans {
+		ch <- notification
+	}
+
+	return nil
+}
 
 type txWithBlock struct {
 	Tx    *blockchain.Tx
@@ -22,10 +77,11 @@ type txWithBlock struct {
 }
 
 type rpcServer struct {
-	blockchain *blockchain.Blockchain
-	server     *Server
+	server *Server
 
 	acceptedTxs chan txWithBlock
+
+	notifier *Notifier
 
 	acceptedTxsListenersMutex sync.Mutex
 	acceptedTxsListeners      []chan txWithBlock
@@ -33,11 +89,15 @@ type rpcServer struct {
 	quit chan struct{}
 }
 
-func (s *rpcServer) HandleAcceptedBlock(block *blockchain.Block) error {
+func (s *rpcServer) OnPushedBlock(block *blockchain.Block) error {
 	for _, tx := range block.Txs {
 		s.acceptedTxs <- txWithBlock{tx, block}
 	}
 
+	return nil
+}
+
+func (s *rpcServer) OnPoppedBlock(block *blockchain.Block) error {
 	return nil
 }
 
@@ -47,11 +107,11 @@ func (s *rpcServer) HandleAcceptedTx(tx *blockchain.Tx) error {
 	return nil
 }
 
-func newRpcServer(blockchain *blockchain.Blockchain, server *Server) *rpcServer {
+func newRpcServer(server *Server) *rpcServer {
 	return &rpcServer{
-		blockchain:  blockchain,
 		server:      server,
 		acceptedTxs: make(chan txWithBlock),
+		notifier:    NewNotifier(),
 		quit:        make(chan struct{}),
 	}
 }
@@ -100,8 +160,51 @@ func (s *rpcServer) startAcceptedTxsHandler() error {
 			return nil
 		}
 	}
+}
+
+func (s *rpcServer) GetBlockTemplate(in *pb.GetBlockTemplateRequest, stream pb.Node_GetBlockTemplateServer) error {
+	ch := s.notifier.Subscribe()
+
+	go s.notifier.Notify(&Notification{
+		Type:  NOTIFICATION_PUSHED_BLOCK,
+		Block: &blockchain.GenesisBlock,
+	})
+
+	for notification := range ch {
+		switch notification.Type {
+		case NOTIFICATION_PUSHED_BLOCK:
+			fallthrough
+		case NOTIFICATION_POPPED_BLOCK:
+			blockTemplate := &pb.BlockTemplate{
+				Version:   notification.Block.Msg.Header.Version,
+				Flags:     notification.Block.Msg.Header.Flags,
+				PrevBlock: notification.Block.Hash()[:],
+				Timestamp: uint64(time.Now().Unix()),
+				Height:    notification.Block.Msg.Header.Height + 1,
+			}
+
+			blockTemplate.Target, _ = s.server.blockchain.CalcNextBlockDifficulty(notification.Block, &blockchain.Block{
+				Msg: &network.BlockMessage{
+					Header: &network.BlockHeader{
+						Height: notification.Block.Msg.Header.Height,
+					},
+				},
+			})
+
+			if err := stream.Send(&pb.GetBlockTemplateReply{
+				Template: blockTemplate,
+			}); err != nil {
+				s.notifier.Unsubscribe(ch)
+				return nil
+			}
+		}
+	}
 
 	return nil
+}
+
+func (s *rpcServer) PublishBlock(ctx context.Context, in *pb.PublishBlockRequest) (*pb.PublishBlockReply, error) {
+	return nil, nil
 }
 
 func (s *rpcServer) GetBlock(ctx context.Context, in *pb.GetBlockRequest) (*pb.GetBlockReply, error) {
@@ -110,7 +213,7 @@ func (s *rpcServer) GetBlock(ctx context.Context, in *pb.GetBlockRequest) (*pb.G
 		return nil, err
 	}
 
-	block, err := s.blockchain.FindBlockByHash(utils.NewHash(hash))
+	block, err := s.server.blockchain.FindBlockByHash(utils.NewHash(hash))
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +270,7 @@ func (s *rpcServer) GetBlock(ctx context.Context, in *pb.GetBlockRequest) (*pb.G
 }
 
 func (s *rpcServer) GetBestBlockHash(ctx context.Context, in *pb.GetBestBlockHashRequest) (*pb.GetBestBlockHashReply, error) {
-	block, err := s.blockchain.FindBestBlock()
+	block, err := s.server.blockchain.FindBestBlock()
 	if err != nil {
 		return nil, err
 	}

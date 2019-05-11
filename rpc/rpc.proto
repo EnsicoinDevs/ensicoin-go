@@ -8,6 +8,7 @@ service Node {
   rpc PublishTx (PublishTxRequest) returns (PublishTxReply) {}
   rpc PublishBlock (PublishBlockRequest) returns (PublishBlockReply) {}
   rpc ListenIncomingTxs (ListenIncomingTxsRequest) returns (stream TxWithBlock) {}
+  rpc GetBlockTemplate (GetBlockTemplateRequest) returns (stream GetBlockTemplateReply) {}
 }
 
 message Error {
@@ -25,6 +26,15 @@ message Block {
   uint32 bits = 8;
   uint64 nonce = 9;
   repeated Tx txs = 10;
+}
+
+message BlockTemplate {
+  uint32 version = 1;
+  repeated string flags = 2;
+  bytes prev_block = 3;
+  uint64 timestamp = 4;
+  uint32 height = 5;
+  uint32 target = 6;
 }
 
 message Tx {
@@ -73,12 +83,20 @@ message PublishTxReply {
   string hash = 2;
 }
 
-message PublishBlockRequest() {
+message PublishBlockRequest {
   bytes block = 1;
 }
 
-message PublishBlockReply() {
+message PublishBlockReply {
   string hash = 1;
+}
+
+message GetBlockTemplateRequest {
+
+}
+
+message GetBlockTemplateReply {
+  BlockTemplate template = 1;
 }
 
 message ListenIncomingTxsRequest {
