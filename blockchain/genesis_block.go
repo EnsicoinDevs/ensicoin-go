@@ -1,8 +1,8 @@
 package blockchain
 
 import (
-	"github.com/EnsicoinDevs/ensicoincoin/network"
-	"github.com/EnsicoinDevs/ensicoincoin/utils"
+	"github.com/EnsicoinDevs/eccd/network"
+	"github.com/EnsicoinDevs/eccd/utils"
 	"time"
 )
 

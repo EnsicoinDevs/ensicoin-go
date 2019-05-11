@@ -2,11 +2,11 @@ package sssync
 
 import (
 	"encoding/hex"
-	"github.com/EnsicoinDevs/ensicoincoin/blockchain"
-	"github.com/EnsicoinDevs/ensicoincoin/mempool"
-	"github.com/EnsicoinDevs/ensicoincoin/network"
-	"github.com/EnsicoinDevs/ensicoincoin/peer"
-	"github.com/EnsicoinDevs/ensicoincoin/utils"
+	"github.com/EnsicoinDevs/eccd/blockchain"
+	"github.com/EnsicoinDevs/eccd/mempool"
+	"github.com/EnsicoinDevs/eccd/network"
+	"github.com/EnsicoinDevs/eccd/peer"
+	"github.com/EnsicoinDevs/eccd/utils"
 	log "github.com/sirupsen/logrus"
 	"sync"
 )

@@ -2,7 +2,7 @@ package blockchain
 
 import (
 	"crypto/sha256"
-	"github.com/EnsicoinDevs/ensicoincoin/utils"
+	"github.com/EnsicoinDevs/eccd/utils"
 	log "github.com/sirupsen/logrus"
 )
 

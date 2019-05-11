@@ -11,6 +11,6 @@ git push deploy master
 ssh -tt $GITUSER@$IP -p $PORT <<EOF
 	cd $DEPLOY_DIR
 	go install
-	sudo systemctl restart ensicoincoin.service
+	sudo systemctl restart eccd.service
 	exit
 EOF

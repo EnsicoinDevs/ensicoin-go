@@ -2,7 +2,7 @@ package network
 
 import (
 	"encoding/binary"
-	"github.com/EnsicoinDevs/ensicoincoin/utils"
+	"github.com/EnsicoinDevs/eccd/utils"
 	"io"
 	"math"
 )

@@ -2,10 +2,10 @@ package mempool
 
 import (
 	"encoding/hex"
-	"github.com/EnsicoinDevs/ensicoincoin/blockchain"
-	"github.com/EnsicoinDevs/ensicoincoin/network"
-	"github.com/EnsicoinDevs/ensicoincoin/scripts"
-	"github.com/EnsicoinDevs/ensicoincoin/utils"
+	"github.com/EnsicoinDevs/eccd/blockchain"
+	"github.com/EnsicoinDevs/eccd/network"
+	"github.com/EnsicoinDevs/eccd/scripts"
+	"github.com/EnsicoinDevs/eccd/utils"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"sync"

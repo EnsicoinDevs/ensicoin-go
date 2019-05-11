@@ -2,7 +2,7 @@ package blockchain
 
 import (
 	"bytes"
-	"github.com/EnsicoinDevs/ensicoincoin/network"
+	"github.com/EnsicoinDevs/eccd/network"
 	"io"
 )
 

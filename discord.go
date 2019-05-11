@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/EnsicoinDevs/ensicoincoin/consensus"
+	"github.com/EnsicoinDevs/eccd/consensus"
 	"github.com/bwmarrin/discordgo"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"

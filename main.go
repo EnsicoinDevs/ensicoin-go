@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/EnsicoinDevs/ensicoincoin/consensus"
+	"github.com/EnsicoinDevs/eccd/consensus"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -79,7 +79,7 @@ func initConfig() {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "ensicoincoin",
+	Use:   "eccd",
 	Short: "EnsiCoinCoin is a questionable implementation of the Ensicoin protocol",
 	Long:  `EnsiCoinCoin is a questionable implementation of the Ensicoin protocol. It is a daemon that allows you to synchronize with the blockchain.`,
 	Run: func(cmd *cobra.Command, args []string) {

@@ -1,7 +1,7 @@
 package network
 
 import (
-	"github.com/EnsicoinDevs/ensicoincoin/utils"
+	"github.com/EnsicoinDevs/eccd/utils"
 	"io"
 )
 

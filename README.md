@@ -1,7 +1,7 @@
-# ensicoincoin
+# eccd
 
-[![Build Status](https://travis-ci.com/EnsicoinDevs/ensicoincoin.svg?branch=master)](https://travis-ci.com/EnsicoinDevs/ensicoincoin)
-[![GoDoc](https://godoc.org/github.com/EnsicoinDevs/ensicoincoin?status.svg)](https://godoc.org/github.com/EnsicoinDevs/ensicoincoin)
+[![Build Status](https://travis-ci.com/EnsicoinDevs/eccd.svg?branch=master)](https://travis-ci.com/EnsicoinDevs/eccd)
+[![GoDoc](https://godoc.org/github.com/EnsicoinDevs/eccd?status.svg)](https://godoc.org/github.com/EnsicoinDevs/eccd)
 
 An implementation of ENSICOIN developed in GO.
 

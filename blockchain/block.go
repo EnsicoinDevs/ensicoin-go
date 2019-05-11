@@ -3,8 +3,8 @@ package blockchain
 import (
 	"bytes"
 	"errors"
-	"github.com/EnsicoinDevs/ensicoincoin/network"
-	"github.com/EnsicoinDevs/ensicoincoin/utils"
+	"github.com/EnsicoinDevs/eccd/network"
+	"github.com/EnsicoinDevs/eccd/utils"
 	"reflect"
 )
 

@@ -2,7 +2,7 @@ package network
 
 import (
 	"fmt"
-	"github.com/EnsicoinDevs/ensicoincoin/utils"
+	"github.com/EnsicoinDevs/eccd/utils"
 	"io"
 )
 

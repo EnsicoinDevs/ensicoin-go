@@ -3,7 +3,7 @@ package network
 import (
 	"bytes"
 	"errors"
-	"github.com/EnsicoinDevs/ensicoincoin/consensus"
+	"github.com/EnsicoinDevs/eccd/consensus"
 	"io"
 )
 

@@ -2,7 +2,7 @@ package peer
 
 import (
 	"fmt"
-	"github.com/EnsicoinDevs/ensicoincoin/network"
+	"github.com/EnsicoinDevs/eccd/network"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"io"

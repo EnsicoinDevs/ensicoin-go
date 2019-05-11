@@ -1,4 +1,4 @@
-module github.com/EnsicoinDevs/ensicoincoin
+module github.com/EnsicoinDevs/eccd
 
 require (
 	cloud.google.com/go v0.36.0 // indirect

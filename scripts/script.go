@@ -1,7 +1,7 @@
 package scripts
 
 import (
-	"github.com/EnsicoinDevs/ensicoincoin/network"
+	"github.com/EnsicoinDevs/eccd/network"
 	"github.com/btcsuite/btcd/btcec"
 	"golang.org/x/crypto/ripemd160"
 	"reflect"
