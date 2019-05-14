@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/hex"
+	"math/big"
 	"reflect"
 )
 
@@ -15,10 +16,18 @@ func NewHash(src []byte) *Hash {
 	return &hash
 }
 
+func (hash *Hash) Big() *big.Int {
+	return new(big.Int).SetBytes(hash[:])
+}
+
 func (hash *Hash) IsEqual(otherHash *Hash) bool {
 	return reflect.DeepEqual(hash, otherHash)
 }
 
 func (hash *Hash) String() string {
 	return hex.EncodeToString(hash[:])
+}
+
+func BigToHash(big *big.Int) *Hash {
+	return NewHash(big.Bytes())
 }

@@ -105,7 +105,7 @@ func (script *Script) Validate() (bool, error) {
 				return false, nil
 			}
 
-			shash := script.Tx.SHash(script.Input, script.SpentOutputValue)
+			shash := script.Tx.SHash(script.Input, script.SpentOutputValue) // TODO: n2
 
 			pubKey, err := btcec.ParsePubKey(rawPubKey, btcec.S256())
 			if err != nil {

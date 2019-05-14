@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/EnsicoinDevs/eccd/utils"
 	"io"
+	"math/big"
 	"time"
 )
 
@@ -17,7 +18,7 @@ type BlockHeader struct {
 	HashMerkleRoot *utils.Hash
 	Timestamp      time.Time
 	Height         uint32
-	Bits           uint32
+	Target         *big.Int
 	Nonce          uint64
 }
 
@@ -63,7 +64,7 @@ func readBlockHeader(reader io.Reader) (*BlockHeader, error) {
 		return nil, err
 	}
 
-	bits, err := ReadUint32(reader)
+	targetHash, err := ReadHash(reader)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +81,7 @@ func readBlockHeader(reader io.Reader) (*BlockHeader, error) {
 		HashMerkleRoot: hashMerkleRoot,
 		Timestamp:      time.Unix(int64(timestamp), 0),
 		Height:         height,
-		Bits:           bits,
+		Target:         targetHash.Big(),
 		Nonce:          nonce,
 	}, nil
 }
@@ -123,7 +124,7 @@ func writeBlockHeader(writer io.Writer, header *BlockHeader) error {
 		return err
 	}
 
-	err = WriteUint32(writer, header.Bits)
+	err = WriteHash(writer, utils.BigToHash(header.Target))
 	if err != nil {
 		return err
 	}
@@ -213,5 +214,5 @@ func (msg *BlockMessage) MsgType() string {
 }
 
 func (msg BlockMessage) String() string {
-	return fmt.Sprintf("MsgBlock[Version: %d, Flags: %v, HashPrevBlock: %x, HashMerkleRoot: %x, Timestamp: %v, Height: %d, Bits: %d, Nonce: %d, Txs: %v]", msg.Header.Version, msg.Header.Flags, msg.Header.HashPrevBlock, msg.Header.HashMerkleRoot, msg.Header.Timestamp, msg.Header.Height, msg.Header.Bits, msg.Header.Nonce, msg.Txs)
+	return fmt.Sprintf("MsgBlock[Version: %d, Flags: %v, HashPrevBlock: %x, HashMerkleRoot: %x, Timestamp: %v, Height: %d, Target: %x, Nonce: %d, Txs: %v]", msg.Header.Version, msg.Header.Flags, msg.Header.HashPrevBlock, msg.Header.HashMerkleRoot, msg.Header.Timestamp, msg.Header.Height, utils.BigToHash(msg.Header.Target), msg.Header.Nonce, msg.Txs)
 }

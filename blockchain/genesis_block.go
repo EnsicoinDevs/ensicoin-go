@@ -3,8 +3,13 @@ package blockchain
 import (
 	"github.com/EnsicoinDevs/eccd/network"
 	"github.com/EnsicoinDevs/eccd/utils"
+	"math/big"
 	"time"
 )
+
+func init() {
+	genesisBlock.Msg.Header.Target, _ = big.NewInt(0).SetString("0000f0000000000000000000000000", 16)
+}
 
 const FT byte = 0x00
 
@@ -16,7 +21,6 @@ var genesisBlock = Block{
 			Timestamp:      time.Unix(1566862920, 0),
 			HashPrevBlock:  utils.NewHash(make([]byte, 32)),
 			HashMerkleRoot: utils.NewHash(make([]byte, 32)),
-			Bits:           0x1e00f000,
 			Nonce:          42,
 		},
 	},

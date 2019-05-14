@@ -380,14 +380,14 @@ func (blockchain *Blockchain) findAncestorHeader(block *Block, nth uint32) (*net
 	return current, nil
 }
 
-func (blockchain *Blockchain) calcNextBlockDifficulty(block *Block, nextBlock *Block) (uint32, error) {
+func (blockchain *Blockchain) calcNextBlockDifficulty(block *Block, nextBlock *Block) (*big.Int, error) {
 	if nextBlock.Msg.Header.Height < consensus.BLOCKS_PER_RETARGET {
-		return block.Msg.Header.Bits, nil
+		return block.Msg.Header.Target, nil
 	}
 
 	lastRetargetBlockHeader, err := blockchain.findAncestorHeader(nextBlock, consensus.BLOCKS_PER_RETARGET)
 	if err != nil {
-		return 0, err
+		return big.NewInt(0), err
 	}
 
 	realizedTimespan := uint64(nextBlock.Msg.Header.Timestamp.Unix() - lastRetargetBlockHeader.Timestamp.Unix())
@@ -397,14 +397,14 @@ func (blockchain *Blockchain) calcNextBlockDifficulty(block *Block, nextBlock *B
 		realizedTimespan = consensus.MAX_RETARGET_TIMESPAN
 	}
 
-	targetBefore := utils.BitsToBig(block.Msg.Header.Bits)
+	targetBefore := block.Msg.Header.Target
 	target := new(big.Int).Mul(targetBefore, big.NewInt(int64(realizedTimespan)))
 	target.Div(target, big.NewInt(consensus.BLOCKS_MEAN_TIMESPAN*consensus.BLOCKS_PER_RETARGET))
 
-	return utils.BigToBits(target), nil
+	return target, nil
 }
 
-func (blockchain *Blockchain) CalcNextBlockDifficulty(block *Block, nextBlock *Block) (uint32, error) {
+func (blockchain *Blockchain) CalcNextBlockDifficulty(block *Block, nextBlock *Block) (*big.Int, error) {
 	blockchain.lock.RLock()
 	defer blockchain.lock.RUnlock()
 
@@ -417,11 +417,11 @@ func (blockchain *Blockchain) validateBlock(block *Block) (error, error) {
 		return errors.New("height is not equal to the previous block height + 1"), nil
 	}
 
-	nextBits, err := blockchain.calcNextBlockDifficulty(parentBlock, block)
+	nextTarget, err := blockchain.calcNextBlockDifficulty(parentBlock, block)
 	if err != nil {
 		return nil, err
 	}
-	if block.Msg.Header.Bits != nextBits {
+	if block.Msg.Header.Target != nextTarget {
 		return errors.New("the difficulty is invalid"), nil
 	}
 

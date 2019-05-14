@@ -123,12 +123,5 @@ func (block *Block) CalcBlockSubsidy() uint64 {
 }
 
 func CheckProofOfWork(header *network.BlockHeader) bool {
-	target := utils.BitsToBig(header.Bits)
-
-	hash := utils.HashToBig(header.Hash())
-	if hash.Cmp(target) > 0 {
-		return false
-	}
-
-	return true
+	return !(header.Hash().Big().Cmp(header.Target) > 0)
 }
