@@ -24,6 +24,10 @@ func (hash *Hash) IsEqual(otherHash *Hash) bool {
 	return reflect.DeepEqual(hash, otherHash)
 }
 
+func (hash *Hash) Bytes() []byte {
+	return hash[:]
+}
+
 func (hash *Hash) String() string {
 	return hex.EncodeToString(hash[:])
 }

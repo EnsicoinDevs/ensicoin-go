@@ -221,6 +221,10 @@ func (server *Server) onBlock(peer *peer.Peer, message *network.BlockMessage) {
 	server.synchronizer.HandleBlock(peer, message)
 }
 
+func (server *Server) ProcessBlock(message *network.BlockMessage) {
+	server.synchronizer.ProcessBlock(message)
+}
+
 func (server *Server) ProcessTx(message *network.TxMessage) {
 	server.mempool.ProcessTx(blockchain.NewTxFromTxMessage(message))
 }

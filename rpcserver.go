@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/EnsicoinDevs/eccd/blockchain"
+	"github.com/EnsicoinDevs/eccd/network"
 	pb "github.com/EnsicoinDevs/eccd/rpc"
+	"github.com/EnsicoinDevs/eccd/utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"golang.org/x/net/context"
@@ -143,25 +146,148 @@ func (s *rpcServer) Stop() error {
 }
 
 func (s *rpcServer) GetInfo(ctx context.Context, in *pb.GetInfoRequest) (*pb.GetInfoReply, error) {
-	return nil, nil
+	bestBlock, err := s.server.blockchain.FindBestBlock()
+	if err != nil {
+		return nil, fmt.Errorf("error finding the best block")
+	}
+
+	return &pb.GetInfoReply{
+		Implementation:  "eccd 0.0.0",
+		ProtocolVersion: 0,
+		BestBlockHash:   bestBlock.Hash().Bytes(),
+	}, nil
 }
 
 func (s *rpcServer) GetBlockByHash(ctx context.Context, in *pb.GetBlockByHashRequest) (*pb.GetBlockByHashReply, error) {
-	return nil, nil
-}
+	block, err := s.server.blockchain.FindBlockByHash(utils.NewHash(in.GetHash()))
+	if err != nil {
+		return nil, fmt.Errorf("error finding the block")
+	}
 
-func (s *rpcServer) GetBlockTemplate(in *pb.GetBlockTemplateRequest, stream pb.Node_GetBlockTemplateServer) error {
-	return nil
+	return &pb.GetBlockByHashReply{
+		Block: BlockMessageToRpcBlock(block.Msg),
+	}, nil
 }
 
 func (s *rpcServer) GetTxByHash(ctx context.Context, in *pb.GetTxByHashRequest) (*pb.GetTxByHashReply, error) {
-	return nil, nil
+	tx := s.server.mempool.FindTxByHash(utils.NewHash(in.GetHash()))
+
+	return &pb.GetTxByHashReply{
+		Tx: TxMessageToRpcTx(tx.Msg),
+	}, nil
+}
+
+func (s *rpcServer) GetBlockTemplate(in *pb.GetBlockTemplateRequest, stream pb.Node_GetBlockTemplateServer) error {
+	ch := s.notifier.Subscribe()
+
+	for notification := range ch {
+		switch notification.Type {
+		case NOTIFICATION_PUSHED_BLOCK:
+		case NOTIFICATION_POPPED_BLOCK:
+			reply := &pb.GetBlockTemplateReply{
+				BlockTemplate: &pb.BlockTemplate{
+					Version:   notification.Block.Msg.Header.Version,
+					Flags:     notification.Block.Msg.Header.Flags,
+					PrevBlock: notification.Block.Msg.Header.HashPrevBlock.Bytes(),
+					Timestamp: uint64(notification.Block.Msg.Header.Timestamp.Unix()),
+					Height:    notification.Block.Msg.Header.Height,
+					Target:    notification.Block.Msg.Header.Target.Bytes(),
+				},
+			}
+
+			txs := s.server.mempool.FetchTxs()
+
+			for _, tx := range txs {
+				reply.Txs = append(reply.Txs, TxMessageToRpcTx(tx.Msg))
+			}
+
+			if err := stream.Send(reply); err != nil {
+				return nil
+			}
+		}
+	}
+
+	return nil
 }
 
 func (s *rpcServer) PublishRawBlock(stream pb.Node_PublishRawBlockServer) error {
-	return nil
+	for {
+		request, err := stream.Recv()
+		if err != nil {
+			return nil
+		}
+
+		blockMsg := network.NewBlockMessage()
+
+		err = blockMsg.Decode(bytes.NewReader(request.GetRawBlock()))
+		if err != nil {
+			return fmt.Errorf("error decoding the raw block")
+		}
+
+		go s.server.ProcessBlock(blockMsg)
+	}
 }
 
 func (s *rpcServer) PublishRawTx(stream pb.Node_PublishRawTxServer) error {
-	return nil
+	for {
+		request, err := stream.Recv()
+		if err != nil {
+			return nil
+		}
+
+		txMsg := network.NewTxMessage()
+
+		err = txMsg.Decode(bytes.NewReader(request.GetRawTx()))
+		if err != nil {
+			return fmt.Errorf("error decoding the raw tx")
+		}
+
+		go s.server.ProcessTx(txMsg)
+	}
+}
+
+func BlockMessageToRpcBlock(blockMsg *network.BlockMessage) *pb.Block {
+	block := &pb.Block{
+		Hash:       blockMsg.Header.Hash().Bytes(),
+		Version:    blockMsg.Header.Version,
+		Flags:      blockMsg.Header.Flags,
+		PrevBlock:  blockMsg.Header.HashPrevBlock.Bytes(),
+		MerkleRoot: blockMsg.Header.HashMerkleRoot.Bytes(),
+		Timestamp:  uint64(blockMsg.Header.Timestamp.Unix()),
+		Height:     blockMsg.Header.Height,
+		Target:     blockMsg.Header.Target.Bytes(),
+	}
+
+	for _, tx := range blockMsg.Txs {
+		block.Txs = append(block.Txs, TxMessageToRpcTx(tx))
+	}
+
+	return block
+}
+
+func TxMessageToRpcTx(txMsg *network.TxMessage) *pb.Tx {
+	tx := &pb.Tx{
+		Hash:    txMsg.Hash().Bytes(),
+		Version: txMsg.Version,
+		Flags:   txMsg.Flags,
+	}
+
+	for _, input := range txMsg.Inputs {
+		tx.Inputs = append(tx.Inputs, &pb.TxInput{
+			PreviousOutput: &pb.Outpoint{
+				Hash:  input.PreviousOutput.Hash.Bytes(),
+				Index: input.PreviousOutput.Index,
+			},
+			Script: input.Script,
+		})
+	}
+
+	for _, output := range txMsg.Outputs {
+		tx.Outputs = append(tx.Outputs, &pb.TxOutput{
+			Value:  output.Value,
+			Script: output.Script,
+		})
+	}
+
+	return tx
 }
