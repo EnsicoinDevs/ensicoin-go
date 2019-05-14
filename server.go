@@ -80,8 +80,7 @@ func (server *Server) Start() {
 
 			return
 		} else {
-			log.Info("we have a new ingoing peer")
-			peer.NewPeer(conn, &peer.Config{
+			peer := peer.NewPeer(conn, &peer.Config{
 				Callbacks: peer.PeerCallbacks{
 					OnReady:        server.onReady,
 					OnDisconnected: server.onDisconnected,
@@ -90,7 +89,11 @@ func (server *Server) Start() {
 					OnInv:          server.onInv,
 					OnBlock:        server.onBlock,
 				},
-			}, true).Start()
+			}, true)
+
+			log.WithField("peer", peer).Info("new incoming connection")
+
+			go peer.Start()
 		}
 	}
 }
@@ -182,7 +185,7 @@ func (server *Server) addPeer(peer *peer.Peer) {
 }
 
 func (server *Server) onReady(peer *peer.Peer) {
-	log.WithField("peer", peer).Debug("a peer is ready")
+	log.WithField("peer", peer).Debug("connection established")
 	server.addPeer(peer)
 	server.synchronizer.HandleReadyPeer(peer)
 }
@@ -198,7 +201,7 @@ func (server *Server) onDisconnected(peer *peer.Peer) {
 
 	server.synchronizer.HandleDisconnectedPeer(peer)
 
-	log.Warning("a peer has been disconnected")
+	log.WithField("peer", peer).Info("disconnected")
 }
 
 func (server *Server) onInv(peer *peer.Peer, message *network.InvMessage) {
@@ -232,7 +235,7 @@ func (server *Server) ProcessTx(message *network.TxMessage) {
 func (server *Server) onTx(peer *peer.Peer, message *network.TxMessage) {
 	log.WithFields(log.Fields{
 		"hash": hex.EncodeToString(message.Hash()[:]),
-	}).Info("received a tx")
+	}).Info("new tx received")
 
 	server.ProcessTx(message)
 }
