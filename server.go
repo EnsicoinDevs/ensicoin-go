@@ -154,7 +154,7 @@ func (server *Server) ConnectTo(address string) error {
 		return err
 	}
 
-	peer.NewPeer(conn, &peer.Config{
+	go peer.NewPeer(conn, &peer.Config{
 		Callbacks: peer.PeerCallbacks{
 			OnReady:        server.onReady,
 			OnDisconnected: server.onDisconnected,

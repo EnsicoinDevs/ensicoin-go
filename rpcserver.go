@@ -11,7 +11,10 @@ import (
 	"github.com/spf13/viper"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"net"
+	"strconv"
 	"sync"
 )
 
@@ -244,6 +247,31 @@ func (s *rpcServer) PublishRawTx(stream pb.Node_PublishRawTxServer) error {
 
 		go s.server.ProcessTx(txMsg)
 	}
+}
+
+func (s *rpcServer) ConnectPeer(ctx context.Context, in *pb.ConnectPeerRequest) (*pb.ConnectPeerReply, error) {
+	if in.GetPeer() == nil {
+		return nil, status.Errorf(codes.InvalidArgument, "peer field is required")
+	}
+
+	if in.GetPeer().GetAddress() == nil {
+		return nil, status.Errorf(codes.InvalidArgument, "address field is required")
+	}
+
+	address := in.GetPeer().GetAddress()
+
+	parsedAddress := net.JoinHostPort(address.GetIp(), strconv.Itoa(int(address.GetPort())))
+
+	err := s.server.ConnectTo(parsedAddress)
+	if err != nil {
+		log.WithError(err).Warn("error connecting to ", parsedAddress)
+	}
+
+	return &pb.ConnectPeerReply{}, nil
+}
+
+func (s *rpcServer) DisconnectPeer(ctx context.Context, in *pb.DisconnectPeerRequest) (*pb.DisconnectPeerReply, error) {
+	return nil, nil
 }
 
 func BlockMessageToRpcBlock(blockMsg *network.BlockMessage) *pb.Block {
