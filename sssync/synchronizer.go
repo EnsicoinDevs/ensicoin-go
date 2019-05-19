@@ -134,7 +134,7 @@ func (sync *Synchronizer) synchronize() {
 	}
 
 	sync.synchronizingPeer.Send(&network.GetBlocksMessage{
-		BlockLocator: []*utils.Hash{bestBlock.Hash()},
+		BlockLocator: []*utils.Hash{bestBlock.Hash(), blockchain.GenesisBlock.Hash()},
 		HashStop:     utils.NewHash(nil),
 	})
 }

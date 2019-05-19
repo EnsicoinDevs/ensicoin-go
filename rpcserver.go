@@ -83,7 +83,7 @@ type rpcServer struct {
 }
 
 func (s *rpcServer) OnPushedBlock(block *blockchain.Block) error {
-	s.notifier.Notify(&Notification{
+	go s.notifier.Notify(&Notification{
 		Type:  NOTIFICATION_PUSHED_BLOCK,
 		Block: block,
 	})
@@ -92,7 +92,7 @@ func (s *rpcServer) OnPushedBlock(block *blockchain.Block) error {
 }
 
 func (s *rpcServer) OnPoppedBlock(block *blockchain.Block) error {
-	s.notifier.Notify(&Notification{
+	go s.notifier.Notify(&Notification{
 		Type:  NOTIFICATION_POPPED_BLOCK,
 		Block: block,
 	})

@@ -1128,7 +1128,10 @@ func (blockchain *Blockchain) ProcessBlock(block *Block) (error, error) {
 		return nil, err
 	}
 	if header == nil {
-		log.WithField("hash", block.Msg.Header.Hash().String()).Info("accepted orphan block")
+		log.WithFields(log.Fields{
+			"hash":   block.Hash().String(),
+			"height": block.Msg.Header.Height,
+		}).Info("accepted orphan block")
 
 		blockchain.addOrphan(block)
 
