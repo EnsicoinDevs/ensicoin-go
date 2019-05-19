@@ -16,6 +16,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"time"
 )
 
 type NotificationType int
@@ -72,49 +73,42 @@ func (n *Notifier) Notify(notification *Notification) error {
 	return nil
 }
 
-type txWithBlock struct {
-	Tx    *blockchain.Tx
-	Block *blockchain.Block
-}
-
 type rpcServer struct {
 	server     *Server
 	grpcServer *grpc.Server
 
-	acceptedTxs chan txWithBlock
-
 	notifier *Notifier
-
-	acceptedTxsListenersMutex sync.Mutex
-	acceptedTxsListeners      []chan txWithBlock
 
 	quit chan struct{}
 }
 
 func (s *rpcServer) OnPushedBlock(block *blockchain.Block) error {
-	for _, tx := range block.Txs {
-		s.acceptedTxs <- txWithBlock{tx, block}
-	}
+	s.notifier.Notify(&Notification{
+		Type:  NOTIFICATION_PUSHED_BLOCK,
+		Block: block,
+	})
 
 	return nil
 }
 
 func (s *rpcServer) OnPoppedBlock(block *blockchain.Block) error {
+	s.notifier.Notify(&Notification{
+		Type:  NOTIFICATION_POPPED_BLOCK,
+		Block: block,
+	})
+
 	return nil
 }
 
 func (s *rpcServer) HandleAcceptedTx(tx *blockchain.Tx) error {
-	s.acceptedTxs <- txWithBlock{tx, nil}
-
 	return nil
 }
 
 func newRpcServer(server *Server) *rpcServer {
 	return &rpcServer{
-		server:      server,
-		acceptedTxs: make(chan txWithBlock),
-		notifier:    NewNotifier(),
-		quit:        make(chan struct{}),
+		server:   server,
+		notifier: NewNotifier(),
+		quit:     make(chan struct{}),
 	}
 }
 
@@ -141,9 +135,8 @@ func (s *rpcServer) Stop() error {
 	log.Debug("rpc server shutting down")
 	defer log.Debug("rpc server shutdown complete")
 
-	s.grpcServer.GracefulStop()
-
 	close(s.quit)
+	s.grpcServer.GracefulStop()
 
 	return nil
 }
@@ -195,34 +188,50 @@ func (s *rpcServer) GetBlockTemplate(in *pb.GetBlockTemplateRequest, stream pb.N
 		}
 	}()
 
-	for notification := range ch {
-		switch notification.Type {
-		case NOTIFICATION_PUSHED_BLOCK:
-		case NOTIFICATION_POPPED_BLOCK:
-			reply := &pb.GetBlockTemplateReply{
-				BlockTemplate: &pb.BlockTemplate{
-					Version:   notification.Block.Msg.Header.Version,
-					Flags:     notification.Block.Msg.Header.Flags,
-					PrevBlock: notification.Block.Msg.Header.HashPrevBlock.Bytes(),
-					Timestamp: uint64(notification.Block.Msg.Header.Timestamp.Unix()),
-					Height:    notification.Block.Msg.Header.Height,
-					Target:    notification.Block.Msg.Header.Target.Bytes(),
-				},
-			}
+	for {
+		select {
+		case notification := <-ch:
+			switch notification.Type {
+			case NOTIFICATION_PUSHED_BLOCK:
+				fallthrough
+			case NOTIFICATION_POPPED_BLOCK:
+				timestamp := time.Now()
 
-			txs := s.server.mempool.FetchTxs()
+				nextTarget, err := s.server.blockchain.CalcNextBlockDifficulty(notification.Block, blockchain.NewBlockFromBlockMessage(&network.BlockMessage{
+					Header: &network.BlockHeader{
+						Height:    notification.Block.Msg.Header.Height + 1,
+						Timestamp: timestamp,
+					},
+				}))
+				if err != nil {
+					return status.Errorf(codes.Internal, "internal error")
+				}
 
-			for _, tx := range txs {
-				reply.Txs = append(reply.Txs, TxMessageToRpcTx(tx.Msg))
-			}
+				reply := &pb.GetBlockTemplateReply{
+					BlockTemplate: &pb.BlockTemplate{
+						Version:   notification.Block.Msg.Header.Version,
+						Flags:     notification.Block.Msg.Header.Flags,
+						PrevBlock: notification.Block.Hash().Bytes(),
+						Timestamp: uint64(timestamp.Unix()),
+						Height:    notification.Block.Msg.Header.Height + 1,
+						Target:    utils.BigToHash(nextTarget).Bytes(),
+					},
+				}
 
-			if err := stream.Send(reply); err != nil {
-				return nil
+				txs := s.server.mempool.FetchTxs()
+
+				for _, tx := range txs {
+					reply.Txs = append(reply.Txs, TxMessageToRpcTx(tx.Msg))
+				}
+
+				if err := stream.Send(reply); err != nil {
+					return nil
+				}
 			}
+		case <-s.quit:
+			return nil
 		}
 	}
-
-	return nil
 }
 
 func (s *rpcServer) PublishRawBlock(ctx context.Context, in *pb.PublishRawBlockRequest) (*pb.PublishRawBlockReply, error) {

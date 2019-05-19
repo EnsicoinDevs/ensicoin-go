@@ -3,7 +3,6 @@ package blockchain
 import (
 	"github.com/EnsicoinDevs/eccd/network"
 	"github.com/EnsicoinDevs/eccd/utils"
-	"math/big"
 	"time"
 )
 
@@ -18,7 +17,7 @@ var genesisBlock = Block{
 			HashPrevBlock:  utils.NewHash(make([]byte, 32)),
 			HashMerkleRoot: utils.NewHash(make([]byte, 32)),
 			Nonce:          42,
-			Target:         big.NewInt(0).SetBytes([]byte{0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}),
+			Target:         utils.NewHash([]byte{0, 0, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}).Big(),
 		},
 	},
 }

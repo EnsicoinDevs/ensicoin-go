@@ -9,6 +9,10 @@ import (
 type Hash [32]byte
 
 func NewHash(src []byte) *Hash {
+	for len(src) < 32 {
+		src = append([]byte{0}, src...)
+	}
+
 	var hash Hash
 
 	copy(hash[:], src)

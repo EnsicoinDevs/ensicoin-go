@@ -79,6 +79,10 @@ func (block *Block) IsSane() error {
 		return errors.New("first tx of the block is not a coinbase")
 	}
 
+	if len(block.Txs[0].Msg.Flags) < 1 {
+		return errors.New("coinbase should have at least one flag")
+	}
+
 	for _, tx := range block.Txs[1:] {
 		if tx.IsCoinBase() {
 			return errors.New("the block have more than one coinbase")

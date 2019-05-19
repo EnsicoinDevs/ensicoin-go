@@ -143,13 +143,13 @@ func (header *BlockHeader) Hash() *utils.Hash {
 
 	hash := utils.Hash(sha256.Sum256(buf.Bytes()))
 
-	hash = sha256.Sum256(hash[:])
+	hash = sha256.Sum256(hash.Bytes())
 
 	return &hash
 }
 
 func (header *BlockHeader) HashString() string {
-	return hex.EncodeToString(header.Hash()[:])
+	return hex.EncodeToString(header.Hash().Bytes())
 }
 
 type BlockMessage struct {

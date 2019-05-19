@@ -157,8 +157,6 @@ func (sync *Synchronizer) handlePushedBlock(block *blockchain.Block) error {
 		},
 	})
 
-	log.Debug("updtating best block")
-
 	return nil
 }
 

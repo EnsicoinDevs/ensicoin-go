@@ -434,7 +434,7 @@ func (blockchain *Blockchain) validateBlock(block *Block) (error, error) {
 	if err != nil {
 		return nil, err
 	}
-	if block.Msg.Header.Target != nextTarget {
+	if block.Msg.Header.Target.Cmp(nextTarget) != 0 {
 		return errors.New("the difficulty is invalid"), nil
 	}
 
@@ -702,11 +702,11 @@ func (blockchain *Blockchain) FetchStxojEntry(blockHash *utils.Hash) ([]*UtxoEnt
 	return blockchain.fetchStxojEntry(blockHash)
 }
 
-func (blockchain *Blockchain) storeLongestChain(blockHash *utils.Hash) error {
+func (blockchain *Blockchain) storeBestBlock(blockHash *utils.Hash) error {
 	return blockchain.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(statsBucket)
 
-		return b.Put([]byte("longestChain"), blockHash.Bytes())
+		return b.Put([]byte("bestBlockHash"), blockHash.Bytes())
 	})
 }
 
@@ -783,7 +783,7 @@ func (blockchain *Blockchain) pushBlock(block *Block) error {
 		}
 	}
 
-	err = blockchain.storeLongestChain(block.Hash())
+	err = blockchain.storeBestBlock(block.Hash())
 	if err != nil {
 		return err
 	}
@@ -823,19 +823,25 @@ func (blockchain *Blockchain) pushBlock(block *Block) error {
 		return err
 	}
 
-	prevBlockAncestorHash, err := blockchain.getAncestor(block.Msg.Header.HashPrevBlock)
-	if err == nil {
-		return err
-	}
+	if block.Msg.Header.Height == consensus.BLOCKS_PER_RETARGET {
+		if err = blockchain.storeAncestor(block.Hash(), genesisBlock.Hash()); err != nil {
+			return err
+		}
+	} else if block.Msg.Header.Height > consensus.BLOCKS_PER_RETARGET {
+		prevBlockAncestorHash, err := blockchain.getAncestor(block.Msg.Header.HashPrevBlock)
+		if err == nil {
+			return err
+		}
 
-	prevBlockAncestorFollowingHash, err := blockchain.getFollowing(prevBlockAncestorHash)
-	if err != nil {
-		return err
-	}
+		prevBlockAncestorFollowingHash, err := blockchain.getFollowing(prevBlockAncestorHash)
+		if err != nil {
+			return err
+		}
 
-	err = blockchain.storeAncestor(block.Hash(), prevBlockAncestorFollowingHash)
-	if err != nil {
-		return err
+		err = blockchain.storeAncestor(block.Hash(), prevBlockAncestorFollowingHash)
+		if err != nil {
+			return err
+		}
 	}
 
 	if blockchain.config.OnPushedBlock != nil {
@@ -907,7 +913,7 @@ func (blockchain *Blockchain) popBlock(block *Block) error {
 		return err
 	}
 
-	err = blockchain.storeLongestChain(block.Msg.Header.HashPrevBlock)
+	err = blockchain.storeBestBlock(block.Msg.Header.HashPrevBlock)
 	if err != nil {
 		return err
 	}
