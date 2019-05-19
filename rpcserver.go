@@ -183,6 +183,18 @@ func (s *rpcServer) GetTxByHash(ctx context.Context, in *pb.GetTxByHashRequest) 
 func (s *rpcServer) GetBlockTemplate(in *pb.GetBlockTemplateRequest, stream pb.Node_GetBlockTemplateServer) error {
 	ch := s.notifier.Subscribe()
 
+	bestBlock, err := s.server.blockchain.FindBestBlock()
+	if err != nil {
+		return status.Errorf(codes.Internal, "internal error")
+	}
+
+	go func() {
+		ch <- &Notification{
+			Type:  NOTIFICATION_PUSHED_BLOCK,
+			Block: bestBlock,
+		}
+	}()
+
 	for notification := range ch {
 		switch notification.Type {
 		case NOTIFICATION_PUSHED_BLOCK:
