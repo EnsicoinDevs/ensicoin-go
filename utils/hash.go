@@ -36,6 +36,15 @@ func (hash *Hash) String() string {
 	return hex.EncodeToString(hash[:])
 }
 
+func StringToHash(hash string) (*Hash, error) {
+	hashBytes, err := hex.DecodeString(hash)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewHash(hashBytes), nil
+}
+
 func BigToHash(big *big.Int) *Hash {
 	return NewHash(big.Bytes())
 }
