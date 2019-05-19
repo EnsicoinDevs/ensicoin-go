@@ -135,12 +135,10 @@ func (server *Server) IsStopping() bool {
 }
 
 func (server *Server) OnPushedBlock(block *blockchain.Block) error {
-	err := server.synchronizer.OnPushedBlock(block)
-	if err != nil {
-		return err
-	}
+	go server.synchronizer.OnPushedBlock(block)
+	go server.rpcServer.OnPushedBlock(block)
 
-	return server.rpcServer.OnPushedBlock(block)
+	return nil
 }
 
 func (server *Server) OnPoppedBlock(block *blockchain.Block) error {
