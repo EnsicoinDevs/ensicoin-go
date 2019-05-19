@@ -225,40 +225,30 @@ func (s *rpcServer) GetBlockTemplate(in *pb.GetBlockTemplateRequest, stream pb.N
 	return nil
 }
 
-func (s *rpcServer) PublishRawBlock(stream pb.Node_PublishRawBlockServer) error {
-	for {
-		request, err := stream.Recv()
-		if err != nil {
-			return nil
-		}
+func (s *rpcServer) PublishRawBlock(ctx context.Context, in *pb.PublishRawBlockRequest) (*pb.PublishRawBlockReply, error) {
+	blockMsg := network.NewBlockMessage()
 
-		blockMsg := network.NewBlockMessage()
-
-		err = blockMsg.Decode(bytes.NewReader(request.GetRawBlock()))
-		if err != nil {
-			return fmt.Errorf("error decoding the raw block")
-		}
-
-		go s.server.ProcessBlock(blockMsg)
+	err := blockMsg.Decode(bytes.NewReader(in.GetRawBlock()))
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "error decoding the raw block")
 	}
+
+	go s.server.ProcessBlock(blockMsg)
+
+	return &pb.PublishRawBlockReply{}, nil
 }
 
-func (s *rpcServer) PublishRawTx(stream pb.Node_PublishRawTxServer) error {
-	for {
-		request, err := stream.Recv()
-		if err != nil {
-			return nil
-		}
+func (s *rpcServer) PublishRawTx(ctx context.Context, in *pb.PublishRawTxRequest) (*pb.PublishRawTxReply, error) {
+	txMsg := network.NewTxMessage()
 
-		txMsg := network.NewTxMessage()
-
-		err = txMsg.Decode(bytes.NewReader(request.GetRawTx()))
-		if err != nil {
-			return fmt.Errorf("error decoding the raw tx")
-		}
-
-		go s.server.ProcessTx(txMsg)
+	err := txMsg.Decode(bytes.NewReader(in.GetRawTx()))
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "error decoding the raw tx")
 	}
+
+	go s.server.ProcessTx(txMsg)
+
+	return &pb.PublishRawTxReply{}, nil
 }
 
 func (s *rpcServer) ConnectPeer(ctx context.Context, in *pb.ConnectPeerRequest) (*pb.ConnectPeerReply, error) {
