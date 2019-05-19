@@ -23,15 +23,16 @@ type Server struct {
 
 	listener net.Listener
 
-	mutex *sync.Mutex
-	peers []*peer.Peer
+	mutex *sync.RWMutex
+	peers map[string]*peer.Peer
 
 	quit chan struct{}
 }
 
 func NewServer() *Server {
 	server := &Server{
-		mutex: &sync.Mutex{},
+		mutex: &sync.RWMutex{},
+		peers: make(map[string]*peer.Peer),
 
 		quit: make(chan struct{}),
 	}
@@ -74,7 +75,10 @@ func (server *Server) Start() {
 	for {
 		conn, err := server.listener.Accept()
 		if err != nil {
-			if !server.IsStopping() {
+			select {
+			case <-server.quit:
+				return
+			default:
 				log.WithError(err).Error("error accepting a new connection")
 			}
 
@@ -169,6 +173,17 @@ func (server *Server) ConnectTo(address string) error {
 	return nil
 }
 
+func (server *Server) DisconnectFrom(peer *peer.Peer) error {
+	return peer.Stop()
+}
+
+func (server *Server) FindPeerByAddress(address string) (*peer.Peer, error) {
+	server.mutex.RLock()
+	defer server.mutex.RUnlock()
+
+	return server.peers[address], nil
+}
+
 func (server *Server) Broadcast(message network.Message) error {
 	for _, peer := range server.peers {
 		peer.Send(message)
@@ -181,7 +196,7 @@ func (server *Server) addPeer(peer *peer.Peer) {
 	server.mutex.Lock()
 	defer server.mutex.Unlock()
 
-	server.peers = append(server.peers, peer)
+	server.peers[peer.RemoteAddr().String()] = peer
 }
 
 func (server *Server) onReady(peer *peer.Peer) {
@@ -192,11 +207,7 @@ func (server *Server) onReady(peer *peer.Peer) {
 
 func (server *Server) onDisconnected(peer *peer.Peer) {
 	server.mutex.Lock()
-	for i, otherPeer := range server.peers {
-		if otherPeer == peer {
-			server.peers = append(server.peers[:i], server.peers[i+1:]...)
-		}
-	}
+	server.peers[peer.RemoteAddr().String()] = peer
 	server.mutex.Unlock()
 
 	server.synchronizer.HandleDisconnectedPeer(peer)

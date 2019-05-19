@@ -271,7 +271,34 @@ func (s *rpcServer) ConnectPeer(ctx context.Context, in *pb.ConnectPeerRequest) 
 }
 
 func (s *rpcServer) DisconnectPeer(ctx context.Context, in *pb.DisconnectPeerRequest) (*pb.DisconnectPeerReply, error) {
-	return nil, nil
+	if in.GetPeer() == nil {
+		return nil, status.Errorf(codes.InvalidArgument, "peer field is required")
+	}
+
+	if in.GetPeer().GetAddress() == nil {
+		return nil, status.Errorf(codes.InvalidArgument, "address field is required")
+	}
+
+	address := in.GetPeer().GetAddress()
+
+	parsedAddress := net.JoinHostPort(address.GetIp(), strconv.Itoa(int(address.GetPort())))
+
+	peer, err := s.server.FindPeerByAddress(parsedAddress)
+	if err != nil {
+		log.WithError(err).Warn("error disconnecting from", parsedAddress)
+		return &pb.DisconnectPeerReply{}, nil
+	}
+	if peer == nil {
+		log.WithError(fmt.Errorf("peer not found")).Warn("error disconnecting from", parsedAddress)
+		return &pb.DisconnectPeerReply{}, nil
+	}
+
+	err = s.server.DisconnectFrom(peer)
+	if err != nil {
+		log.WithError(err).Warn("error disconnecting from", parsedAddress)
+	}
+
+	return &pb.DisconnectPeerReply{}, nil
 }
 
 func BlockMessageToRpcBlock(blockMsg *network.BlockMessage) *pb.Block {

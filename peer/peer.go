@@ -80,9 +80,14 @@ func (peer *Peer) Start() error {
 
 		for {
 			message, err = network.ReadMessage(peer.conn)
+			select {
+			case <-peer.quit:
+				return
+			default:
+			}
 			if err != nil {
 				if err == io.EOF {
-					peer.conn.Close() // TODO: fixme
+					peer.conn.Close()
 
 					close(peer.quit)
 
@@ -92,6 +97,7 @@ func (peer *Peer) Start() error {
 					return
 				} else {
 					log.WithError(err).Error("error reading a message")
+					continue
 				}
 			}
 
@@ -100,6 +106,21 @@ func (peer *Peer) Start() error {
 	}()
 
 	return nil
+}
+
+func (peer *Peer) Stop() error {
+	close(peer.quit)
+	peer.conn.Close() // TODO: improve
+
+	if peer.config.Callbacks.OnDisconnected != nil {
+		peer.config.Callbacks.OnDisconnected(peer)
+	}
+
+	return nil
+}
+
+func (peer *Peer) RemoteAddr() net.Addr {
+	return peer.conn.RemoteAddr()
 }
 
 func (peer *Peer) negotiate() error {

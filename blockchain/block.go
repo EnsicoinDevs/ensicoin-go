@@ -5,8 +5,11 @@ import (
 	"errors"
 	"github.com/EnsicoinDevs/eccd/network"
 	"github.com/EnsicoinDevs/eccd/utils"
+	"math/big"
 	"reflect"
 )
+
+var MaxTarget = new(big.Int).Lsh(big.NewInt(1), 256)
 
 type Block struct {
 	Msg *network.BlockMessage
@@ -120,6 +123,10 @@ func (block *Block) CalcBlockSubsidy() uint64 {
 	}
 
 	return uint64(0x200000000000) >> ((block.Msg.Header.Height - 1) / 0x40000)
+}
+
+func (block *Block) GetWork() *big.Int {
+	return new(big.Int).Sub(MaxTarget, block.Msg.Header.Target)
 }
 
 func CheckProofOfWork(header *network.BlockHeader) bool {

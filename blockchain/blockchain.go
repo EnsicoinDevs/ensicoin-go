@@ -74,6 +74,8 @@ var (
 	followingBucket = []byte("following")
 	utxosBucket     = []byte("utxos")
 	stxojBucket     = []byte("stxoj")
+	workBucket      = []byte("work")
+	ancestorBucket  = []byte("ancestor")
 )
 
 func (blockchain *Blockchain) Load() error {
@@ -92,7 +94,7 @@ func (blockchain *Blockchain) Load() error {
 			return errors.Wrap(err, "error creating the blocks bucket")
 		}
 
-		genesisBlockInDb := b.Get(genesisBlock.Hash()[:])
+		genesisBlockInDb := b.Get(genesisBlock.Hash().Bytes())
 		if genesisBlockInDb == nil {
 			shouldStoreGenesisBlock = true
 		}
@@ -104,7 +106,7 @@ func (blockchain *Blockchain) Load() error {
 
 		bestBlockHashInDb := b.Get([]byte("bestBlockHash"))
 		if bestBlockHashInDb == nil {
-			b.Put([]byte("bestBlockHash"), genesisBlock.Hash()[:])
+			b.Put([]byte("bestBlockHash"), genesisBlock.Hash().Bytes())
 			b.Put([]byte("bestBlockHeight"), []byte{0, 0, 0, 0})
 		} else {
 			blockchain.stats.BestBlockHash = *utils.NewHash(bestBlockHashInDb)
@@ -131,11 +133,22 @@ func (blockchain *Blockchain) Load() error {
 			return errors.Wrap(err, "error creating the stxoj bucket")
 		}
 
+		_, err = tx.CreateBucketIfNotExists(workBucket)
+		if err != nil {
+			return errors.Wrap(err, "error creating the work bucket")
+		}
+
+		_, err = tx.CreateBucketIfNotExists(ancestorBucket)
+		if err != nil {
+			return errors.Wrap(err, "error creating the ancestor bucket")
+		}
+
 		return nil
 	})
 
 	if shouldStoreGenesisBlock {
 		blockchain.storeBlock(&genesisBlock)
+		blockchain.storeWork(genesisBlock.Hash(), big.NewInt(0))
 	}
 
 	return nil
@@ -236,7 +249,7 @@ func (blockchain *Blockchain) storeBlock(block *Block) error {
 			return err
 		}
 
-		b.Put(block.Hash()[:], blockBytes)
+		b.Put(block.Hash().Bytes(), blockBytes)
 
 		return nil
 	})
@@ -250,7 +263,7 @@ func (blockchain *Blockchain) findBlockByHash(hash *utils.Hash) (*Block, error) 
 	err := blockchain.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket(blocksBucket)
 
-		blockBytes := b.Get(hash[:])
+		blockBytes := b.Get(hash.Bytes())
 		if blockBytes == nil {
 			return nil
 		}
@@ -338,7 +351,7 @@ func (blockchain *Blockchain) findBlockHashesStartingAt(hash *utils.Hash) ([]*ut
 		b := tx.Bucket(followingBucket)
 
 		for {
-			hashBytes := b.Get(hash[:])
+			hashBytes := b.Get(hash.Bytes())
 			if hashBytes == nil {
 				break
 			}
@@ -551,19 +564,86 @@ func (blockchain *Blockchain) storeUtxos(utxos *Utxos) error {
 	})
 }
 
-func (blockchain *Blockchain) storeFollowing(block *utils.Hash, nextBlock *utils.Hash) error {
+func (blockchain *Blockchain) storeWork(blockHash *utils.Hash, work *big.Int) error {
 	return blockchain.db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket(followingBucket)
+		b := tx.Bucket(workBucket)
 
-		return b.Put(block[:], nextBlock[:])
+		return b.Put(blockHash.Bytes(), work.Bytes())
 	})
 }
 
-func (blockchain *Blockchain) removeFollowing(block *utils.Hash) error {
+func (blockchain *Blockchain) getWork(blockHash *utils.Hash) (*big.Int, error) {
+	var work = new(big.Int)
+
+	return work, blockchain.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket(workBucket)
+
+		workBytes := b.Get(blockHash.Bytes())
+		if workBytes == nil {
+			return errors.New("block not found")
+		}
+
+		work.SetBytes(workBytes)
+
+		return nil
+	})
+}
+
+func (blockchain *Blockchain) storeAncestor(blockHash *utils.Hash, ancestorHash *utils.Hash) error {
+	return blockchain.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(ancestorBucket)
+
+		return b.Put(blockHash.Bytes(), ancestorHash.Bytes())
+	})
+}
+
+func (blockchain *Blockchain) getAncestor(blockHash *utils.Hash) (*utils.Hash, error) {
+	var ancestorHash *utils.Hash
+
+	return ancestorHash, blockchain.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket(ancestorBucket)
+
+		ancestorHashBytes := b.Get(blockHash.Bytes())
+		if ancestorHashBytes == nil {
+			return errors.New("block not found")
+		}
+
+		ancestorHash = utils.NewHash(ancestorHashBytes)
+
+		return nil
+	})
+}
+
+func (blockchain *Blockchain) storeFollowing(blockHash *utils.Hash, nextBlockHash *utils.Hash) error {
 	return blockchain.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(followingBucket)
 
-		return b.Delete(block[:])
+		return b.Put(blockHash.Bytes(), nextBlockHash.Bytes())
+	})
+}
+
+func (blockchain *Blockchain) removeFollowing(blockHash *utils.Hash) error {
+	return blockchain.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(followingBucket)
+
+		return b.Delete(blockHash.Bytes())
+	})
+}
+
+func (blockchain *Blockchain) getFollowing(blockHash *utils.Hash) (*utils.Hash, error) {
+	var followingHash *utils.Hash
+
+	return followingHash, blockchain.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket(followingBucket)
+
+		followingHashBytes := b.Get(blockHash.Bytes())
+		if followingHashBytes == nil {
+			return errors.New("block not found")
+		}
+
+		followingHash = utils.NewHash(followingHashBytes)
+
+		return nil
 	})
 }
 
@@ -571,7 +651,7 @@ func (blockchain *Blockchain) removeStxojEntry(blockHash *utils.Hash) error {
 	return blockchain.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(stxojBucket)
 
-		return b.Delete(blockHash[:])
+		return b.Delete(blockHash.Bytes())
 	})
 }
 
@@ -588,7 +668,7 @@ func (blockchain *Blockchain) storeStxojEntry(blockHash *utils.Hash, entry []*Ut
 			}
 		}
 
-		return b.Put(blockHash[:], buf.Bytes())
+		return b.Put(blockHash.Bytes(), buf.Bytes())
 	})
 }
 
@@ -598,7 +678,7 @@ func (blockchain *Blockchain) fetchStxojEntry(blockHash *utils.Hash) ([]*UtxoEnt
 	err := blockchain.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket(stxojBucket)
 
-		buf := bytes.NewBuffer(b.Get(blockHash[:]))
+		buf := bytes.NewBuffer(b.Get(blockHash.Bytes()))
 
 		for buf.Len() != 0 {
 			utxoEntry, err := ReadUtxoEntry(buf)
@@ -626,7 +706,7 @@ func (blockchain *Blockchain) storeLongestChain(blockHash *utils.Hash) error {
 	return blockchain.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(statsBucket)
 
-		return b.Put([]byte("longestChain"), blockHash[:])
+		return b.Put([]byte("longestChain"), blockHash.Bytes())
 	})
 }
 
@@ -638,7 +718,7 @@ func (blockchain *Blockchain) storeBlockHashAtHeight(blockHash *utils.Hash, heig
 
 		binary.BigEndian.PutUint32(heightBytes, height)
 
-		return b.Put(heightBytes, blockHash[:])
+		return b.Put(heightBytes, blockHash.Bytes())
 	})
 }
 
@@ -708,11 +788,6 @@ func (blockchain *Blockchain) pushBlock(block *Block) error {
 		return err
 	}
 
-	err = blockchain.storeFollowing(longestChain.Hash(), block.Hash())
-	if err != nil {
-		return err
-	}
-
 	err = blockchain.storeStxojEntry(block.Hash(), stxoj)
 	if err != nil {
 		return err
@@ -734,6 +809,31 @@ func (blockchain *Blockchain) pushBlock(block *Block) error {
 	}
 
 	err = blockchain.storeFollowing(block.Msg.Header.HashPrevBlock, block.Hash())
+	if err != nil {
+		return err
+	}
+
+	prevBlockWork, err := blockchain.getWork(block.Msg.Header.HashPrevBlock)
+	if err != nil {
+		return err
+	}
+
+	err = blockchain.storeWork(block.Hash(), prevBlockWork.Add(prevBlockWork, block.GetWork()))
+	if err != nil {
+		return err
+	}
+
+	prevBlockAncestorHash, err := blockchain.getAncestor(block.Msg.Header.HashPrevBlock)
+	if err == nil {
+		return err
+	}
+
+	prevBlockAncestorFollowingHash, err := blockchain.getFollowing(prevBlockAncestorHash)
+	if err != nil {
+		return err
+	}
+
+	err = blockchain.storeAncestor(block.Hash(), prevBlockAncestorFollowingHash)
 	if err != nil {
 		return err
 	}
@@ -852,6 +952,28 @@ func (blockchain *Blockchain) findForkingBlock(blockA *Block, blockB *Block) (*B
 	return blockA, nil
 }
 
+func (blockchain *Blockchain) findBlockHashesBetween(startBlockHash, endBlockHash *utils.Hash) ([]*utils.Hash, error) {
+	current := endBlockHash
+	blockHashes := []*utils.Hash{current}
+
+	for !current.IsEqual(startBlockHash) && !current.IsEqual(genesisBlock.Hash()) {
+		currentBlock, err := blockchain.findBlockByHash(current)
+		if err != nil {
+			return nil, err
+		}
+
+		current = currentBlock.Msg.Header.HashPrevBlock
+		blockHashes = append(blockHashes, current)
+	}
+
+	// Reverse the slice
+	for i, j := 0, len(blockHashes)-1; i < j; i, j = i+1, j-1 {
+		blockHashes[i], blockHashes[j] = blockHashes[j], blockHashes[i]
+	}
+
+	return blockHashes, nil
+}
+
 func (blockchain *Blockchain) acceptBlock(block *Block) (bool, error) {
 	err := blockchain.storeBlock(block)
 	if err != nil {
@@ -864,8 +986,7 @@ func (blockchain *Blockchain) acceptBlock(block *Block) (bool, error) {
 	}
 
 	if bestBlock.Hash().IsEqual(block.Msg.Header.HashPrevBlock) {
-		err = blockchain.pushBlock(block)
-		if err != nil {
+		if err = blockchain.pushBlock(block); err != nil {
 			return false, err
 		}
 
@@ -878,6 +999,41 @@ func (blockchain *Blockchain) acceptBlock(block *Block) (bool, error) {
 	}
 	if forkingBlock == nil {
 		return false, errors.New("can't find the forking block")
+	}
+
+	current := bestBlock
+
+	for !current.Hash().IsEqual(forkingBlock.Hash()) {
+		if err = blockchain.popBlock(current); err != nil {
+			return false, err
+		}
+
+		current, err = blockchain.FindBestBlock()
+		if err != nil {
+			return false, err
+		}
+	}
+
+	blockHashesToPush, err := blockchain.findBlockHashesBetween(forkingBlock.Hash(), block.Hash())
+	if err != nil {
+		return false, err
+	}
+
+	if len(blockHashesToPush) < 1 {
+		return false, errors.New("nani the fuck")
+	}
+
+	blockHashesToPush = blockHashesToPush[1:]
+
+	for _, blockHashToPush := range blockHashesToPush {
+		blockToPush, err := blockchain.findBlockByHash(blockHashToPush)
+		if err != nil {
+			return false, err
+		}
+
+		if err = blockchain.pushBlock(blockToPush); err != nil {
+			return false, err
+		}
 	}
 
 	return true, nil

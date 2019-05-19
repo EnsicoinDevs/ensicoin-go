@@ -7,10 +7,6 @@ import (
 	"time"
 )
 
-func init() {
-	genesisBlock.Msg.Header.Target, _ = big.NewInt(0).SetString("0000f0000000000000000000000000", 16)
-}
-
 const FT byte = 0x00
 
 var genesisBlock = Block{
@@ -22,6 +18,7 @@ var genesisBlock = Block{
 			HashPrevBlock:  utils.NewHash(make([]byte, 32)),
 			HashMerkleRoot: utils.NewHash(make([]byte, 32)),
 			Nonce:          42,
+			Target:         big.NewInt(0).SetBytes([]byte{0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}),
 		},
 	},
 }
