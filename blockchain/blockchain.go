@@ -148,7 +148,6 @@ func (blockchain *Blockchain) Load() error {
 
 	if shouldStoreGenesisBlock {
 		blockchain.storeBlock(&genesisBlock)
-		blockchain.storeWork(genesisBlock.Hash(), big.NewInt(0))
 	}
 
 	return nil
@@ -197,8 +196,16 @@ func (blockchain *Blockchain) fetchUtxos(tx *Tx) (*Utxos, []*network.Outpoint, e
 }
 
 func (blockchain *Blockchain) FetchUtxos(tx *Tx) (*Utxos, []*network.Outpoint, error) {
+	log.WithFields(log.Fields{
+		"func":  "FetchUtxos",
+		"mutex": "blockchain",
+	}).Trace("rlocking")
 	blockchain.lock.RLock()
 	defer blockchain.lock.RUnlock()
+	defer log.WithFields(log.Fields{
+		"func":  "FetchUtxos",
+		"mutex": "blockchain",
+	}).Trace("runlocking")
 
 	return blockchain.fetchUtxos(tx)
 }
@@ -234,14 +241,59 @@ func (blockchain *Blockchain) fetchAllUtxos() (*Utxos, error) {
 }
 
 func (blockchain *Blockchain) FetchAllUtxos() (*Utxos, error) {
+	log.WithFields(log.Fields{
+		"func":  "FetchAllUtxos",
+		"mutex": "blockchain",
+	}).Trace("rlocking")
 	blockchain.lock.RLock()
 	defer blockchain.lock.RUnlock()
+	defer log.WithFields(log.Fields{
+		"func":  "FetchAllUtxos",
+		"mutex": "blockchain",
+	}).Trace("runlocking")
 
 	return blockchain.fetchAllUtxos()
 }
 
 func (blockchain *Blockchain) storeBlock(block *Block) error {
-	err := blockchain.db.Update(func(tx *bolt.Tx) error {
+	if block.Hash().IsEqual(genesisBlock.Hash()) {
+		if err := blockchain.storeWork(block.Hash(), big.NewInt(0)); err != nil {
+			return err
+		}
+	} else {
+		prevBlockWork, err := blockchain.getWork(block.Msg.Header.HashPrevBlock)
+		if err != nil {
+			return err
+		}
+
+		err = blockchain.storeWork(block.Hash(), prevBlockWork.Add(prevBlockWork, block.GetWork()))
+		if err != nil {
+			return err
+		}
+
+		if block.Msg.Header.Height == consensus.BLOCKS_PER_RETARGET {
+			if err = blockchain.storeAncestor(block.Hash(), genesisBlock.Hash()); err != nil {
+				return err
+			}
+		} else if block.Msg.Header.Height > consensus.BLOCKS_PER_RETARGET {
+			prevBlockAncestorHash, err := blockchain.getAncestor(block.Msg.Header.HashPrevBlock)
+			if err == nil {
+				return err
+			}
+
+			prevBlockAncestorFollowingHash, err := blockchain.getFollowing(prevBlockAncestorHash)
+			if err != nil {
+				return err
+			}
+
+			err = blockchain.storeAncestor(block.Hash(), prevBlockAncestorFollowingHash)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return blockchain.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(blocksBucket)
 
 		blockBytes, err := block.MarshalBinary()
@@ -253,8 +305,6 @@ func (blockchain *Blockchain) storeBlock(block *Block) error {
 
 		return nil
 	})
-
-	return err
 }
 
 func (blockchain *Blockchain) findBlockByHash(hash *utils.Hash) (*Block, error) {
@@ -282,8 +332,16 @@ func (blockchain *Blockchain) findBlockByHash(hash *utils.Hash) (*Block, error) 
 }
 
 func (blockchain *Blockchain) FindBlockByHash(hash *utils.Hash) (*Block, error) {
+	log.WithFields(log.Fields{
+		"func":  "FindBlockByHash",
+		"mutex": "blockchain",
+	}).Trace("rlocking")
 	blockchain.lock.RLock()
 	defer blockchain.lock.RUnlock()
+	defer log.WithFields(log.Fields{
+		"func":  "FindBlockByHash",
+		"mutex": "blockchain",
+	}).Trace("runlocking")
 
 	return blockchain.findBlockByHash(hash)
 }
@@ -310,8 +368,16 @@ func (blockchain *Blockchain) findBlockHeaderByHash(hash *utils.Hash) (*network.
 }
 
 func (blockchain *Blockchain) FindBlockHeaderByHash(hash *utils.Hash) (*network.BlockHeader, error) {
+	log.WithFields(log.Fields{
+		"func":  "FindBlockHeaderByHash",
+		"mutex": "blockchain",
+	}).Trace("rlocking")
 	blockchain.lock.RLock()
 	defer blockchain.lock.RUnlock()
+	defer log.WithFields(log.Fields{
+		"func":  "FindBlockHeaderByHash",
+		"mutex": "blockchain",
+	}).Trace("runlocking")
 
 	return blockchain.findBlockHeaderByHash(hash)
 }
@@ -338,8 +404,16 @@ func (blockchain *Blockchain) findBestBlock() (*Block, error) {
 }
 
 func (blockchain *Blockchain) FindBestBlock() (*Block, error) {
+	log.WithFields(log.Fields{
+		"func":  "FindBestBlock",
+		"mutex": "blockchain",
+	}).Trace("rlocking")
 	blockchain.lock.RLock()
 	defer blockchain.lock.RUnlock()
+	defer log.WithFields(log.Fields{
+		"func":  "FindBestBlock",
+		"mutex": "blockchain",
+	}).Trace("runlocking")
 
 	return blockchain.findBestBlock()
 }
@@ -371,8 +445,16 @@ func (blockchain *Blockchain) findBlockHashesStartingAt(hash *utils.Hash) ([]*ut
 }
 
 func (blockchain *Blockchain) FindBlockHashesStartingAt(hash *utils.Hash) ([]*utils.Hash, error) {
+	log.WithFields(log.Fields{
+		"func":  "FindBlockHashesStartingAt",
+		"mutex": "blockchain",
+	}).Trace("rlocking")
 	blockchain.lock.RLock()
 	defer blockchain.lock.RUnlock()
+	defer log.WithFields(log.Fields{
+		"func":  "FindBlockHashesStartingAt",
+		"mutex": "blockchain",
+	}).Trace("runlocking")
 
 	return blockchain.findBlockHashesStartingAt(hash)
 }
@@ -418,8 +500,16 @@ func (blockchain *Blockchain) calcNextBlockDifficulty(block *Block, nextBlock *B
 }
 
 func (blockchain *Blockchain) CalcNextBlockDifficulty(block *Block, nextBlock *Block) (*big.Int, error) {
+	log.WithFields(log.Fields{
+		"func":  "CalcNextBlockDifficulty",
+		"mutex": "blockchain",
+	}).Trace("rlocking")
 	blockchain.lock.RLock()
 	defer blockchain.lock.RUnlock()
+	defer log.WithFields(log.Fields{
+		"func":  "CalcNextBlockDifficulty",
+		"mutex": "blockchain",
+	}).Trace("runlocking")
 
 	return blockchain.calcNextBlockDifficulty(block, nextBlock)
 }
@@ -478,8 +568,16 @@ func (blockchain *Blockchain) validateBlock(block *Block) (error, error) {
 }
 
 func (blockchain *Blockchain) ValidateBlock(block *Block) (error, error) {
+	log.WithFields(log.Fields{
+		"func":  "ValidateBlock",
+		"mutex": "blockchain",
+	}).Trace("rlocking")
 	blockchain.lock.RLock()
 	defer blockchain.lock.RUnlock()
+	defer log.WithFields(log.Fields{
+		"func":  "ValidateBlock",
+		"mutex": "blockchain",
+	}).Trace("runlocking")
 
 	return blockchain.validateBlock(block)
 }
@@ -525,8 +623,16 @@ func (blockchain *Blockchain) validateTx(tx *Tx, block *Block, utxos *Utxos) (bo
 }
 
 func (blockchain *Blockchain) Validatetx(tx *Tx, block *Block, utxos *Utxos) (bool, uint64, error) {
+	log.WithFields(log.Fields{
+		"func":  "ValidateTx",
+		"mutex": "blockchain",
+	}).Trace("rlocking")
 	blockchain.lock.RLock()
 	defer blockchain.lock.RUnlock()
+	defer log.WithFields(log.Fields{
+		"func":  "ValidateTx",
+		"mutex": "blockchain",
+	}).Trace("runlocking")
 
 	return blockchain.Validatetx(tx, block, utxos)
 }
@@ -696,8 +802,16 @@ func (blockchain *Blockchain) fetchStxojEntry(blockHash *utils.Hash) ([]*UtxoEnt
 }
 
 func (blockchain *Blockchain) FetchStxojEntry(blockHash *utils.Hash) ([]*UtxoEntry, error) {
+	log.WithFields(log.Fields{
+		"func":  "FetchStxojEntry",
+		"mutex": "blockchain",
+	}).Trace("rlocking")
 	blockchain.lock.RLock()
 	defer blockchain.lock.RUnlock()
+	defer log.WithFields(log.Fields{
+		"func":  "FetchStxojEntry",
+		"mutex": "blockchain",
+	}).Trace("runlocking")
 
 	return blockchain.fetchStxojEntry(blockHash)
 }
@@ -741,8 +855,16 @@ func (blockchain *Blockchain) getBlockHashAtHeight(height uint32) (*utils.Hash, 
 }
 
 func (blockchain *Blockchain) GetBlockHashAtHeight(height uint32) (*utils.Hash, error) {
+	log.WithFields(log.Fields{
+		"func":  "GetBlockHashAtHeight",
+		"mutex": "blockchain",
+	}).Trace("rlocking")
 	blockchain.lock.RLock()
 	defer blockchain.lock.RUnlock()
+	defer log.WithFields(log.Fields{
+		"func":  "GetBlockHashAtHeight",
+		"mutex": "blockchain",
+	}).Trace("runlocking")
 
 	return blockchain.getBlockHashAtHeight(height)
 }
@@ -813,37 +935,6 @@ func (blockchain *Blockchain) pushBlock(block *Block) error {
 		return err
 	}
 
-	prevBlockWork, err := blockchain.getWork(block.Msg.Header.HashPrevBlock)
-	if err != nil {
-		return err
-	}
-
-	err = blockchain.storeWork(block.Hash(), prevBlockWork.Add(prevBlockWork, block.GetWork()))
-	if err != nil {
-		return err
-	}
-
-	if block.Msg.Header.Height == consensus.BLOCKS_PER_RETARGET {
-		if err = blockchain.storeAncestor(block.Hash(), genesisBlock.Hash()); err != nil {
-			return err
-		}
-	} else if block.Msg.Header.Height > consensus.BLOCKS_PER_RETARGET {
-		prevBlockAncestorHash, err := blockchain.getAncestor(block.Msg.Header.HashPrevBlock)
-		if err == nil {
-			return err
-		}
-
-		prevBlockAncestorFollowingHash, err := blockchain.getFollowing(prevBlockAncestorHash)
-		if err != nil {
-			return err
-		}
-
-		err = blockchain.storeAncestor(block.Hash(), prevBlockAncestorFollowingHash)
-		if err != nil {
-			return err
-		}
-	}
-
 	if blockchain.config.OnPushedBlock != nil {
 		blockchain.config.OnPushedBlock(block)
 	}
@@ -857,7 +948,7 @@ func (blockchain *Blockchain) popBlock(block *Block) error {
 		return err
 	}
 
-	if longestChain.Hash() != block.Hash() {
+	if !longestChain.Hash().IsEqual(block.Hash()) {
 		return errors.New("block must be the best block")
 	}
 
@@ -936,7 +1027,7 @@ func (blockchain *Blockchain) findForkingBlock(blockA *Block, blockB *Block) (*B
 
 	// Same with blockA
 	for blockA.Msg.Header.Height > blockB.Msg.Header.Height {
-		blockA, err = blockchain.findBlockByHash(blockB.Msg.Header.HashPrevBlock)
+		blockA, err = blockchain.findBlockByHash(blockA.Msg.Header.HashPrevBlock)
 		if err != nil {
 			return nil, err
 		}
@@ -999,6 +1090,20 @@ func (blockchain *Blockchain) acceptBlock(block *Block) (bool, error) {
 		return true, nil
 	}
 
+	bestBlockWork, err := blockchain.getWork(bestBlock.Hash())
+	if err != nil {
+		return false, err
+	}
+
+	blockWork, err := blockchain.getWork(block.Hash())
+	if err != nil {
+		return false, err
+	}
+
+	if bestBlockWork.Cmp(blockWork) > 0 {
+		return true, nil
+	}
+
 	forkingBlock, err := blockchain.findForkingBlock(bestBlock, block)
 	if err != nil {
 		return false, err
@@ -1014,7 +1119,7 @@ func (blockchain *Blockchain) acceptBlock(block *Block) (bool, error) {
 			return false, err
 		}
 
-		current, err = blockchain.FindBestBlock()
+		current, err = blockchain.findBestBlock()
 		if err != nil {
 			return false, err
 		}
@@ -1084,8 +1189,16 @@ func (blockchain *Blockchain) findOrphan(hash *utils.Hash) (*Block, error) {
 }
 
 func (blockchain *Blockchain) FindOrphan(hash *utils.Hash) (*Block, error) {
+	log.WithFields(log.Fields{
+		"func":  "FindOrphan",
+		"mutex": "blockchain",
+	}).Trace("rlocking")
 	blockchain.lock.RLock()
 	defer blockchain.lock.RUnlock()
+	defer log.WithFields(log.Fields{
+		"func":  "FindOrphan",
+		"mutex": "blockchain",
+	}).Trace("runlocking")
 
 	return blockchain.findOrphan(hash)
 }
@@ -1100,8 +1213,16 @@ func (blockchain *Blockchain) removeOrphan(hash *utils.Hash) {
 }
 
 func (blockchain *Blockchain) ProcessBlock(block *Block) (error, error) {
+	log.WithFields(log.Fields{
+		"func":  "ProcessBlock",
+		"mutex": "blockchain",
+	}).Trace("locking")
 	blockchain.lock.Lock()
 	defer blockchain.lock.Unlock()
+	defer log.WithFields(log.Fields{
+		"func":  "ProcessBlock",
+		"mutex": "blockchain",
+	}).Trace("unlocking")
 
 	header, err := blockchain.findBlockHeaderByHash(block.Hash())
 	if err != nil {

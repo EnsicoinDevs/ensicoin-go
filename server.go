@@ -142,12 +142,10 @@ func (server *Server) OnPushedBlock(block *blockchain.Block) error {
 }
 
 func (server *Server) OnPoppedBlock(block *blockchain.Block) error {
-	err := server.synchronizer.OnPoppedBlock(block)
-	if err != nil {
-		return err
-	}
+	go server.synchronizer.OnPoppedBlock(block)
+	go server.rpcServer.OnPoppedBlock(block)
 
-	return server.rpcServer.OnPushedBlock(block)
+	return nil
 }
 
 func (server *Server) ConnectTo(address string) error {
@@ -176,8 +174,16 @@ func (server *Server) DisconnectFrom(peer *peer.Peer) error {
 }
 
 func (server *Server) FindPeerByAddress(address string) (*peer.Peer, error) {
+	log.WithFields(log.Fields{
+		"func":  "FindPeerByAddress",
+		"mutex": "server",
+	}).Trace("rlocking")
 	server.mutex.RLock()
 	defer server.mutex.RUnlock()
+	defer log.WithFields(log.Fields{
+		"func":  "FindPeerByAddress",
+		"mutex": "server",
+	}).Trace("runlocking")
 
 	return server.peers[address], nil
 }
@@ -191,10 +197,34 @@ func (server *Server) Broadcast(message network.Message) error {
 }
 
 func (server *Server) addPeer(peer *peer.Peer) {
+	log.WithFields(log.Fields{
+		"func":  "addPeer",
+		"mutex": "server",
+	}).Trace("locking")
 	server.mutex.Lock()
-	defer server.mutex.Unlock()
 
 	server.peers[peer.RemoteAddr().String()] = peer
+
+	log.WithFields(log.Fields{
+		"func":  "addPeer",
+		"mutex": "server",
+	}).Trace("unlocking")
+	server.mutex.Unlock()
+}
+
+func (server *Server) removePeer(peer *peer.Peer) {
+	log.WithFields(log.Fields{
+		"func":  "removePeer",
+		"mutex": "server",
+	}).Trace("locking")
+	server.mutex.Lock()
+	server.peers[peer.RemoteAddr().String()] = peer
+
+	log.WithFields(log.Fields{
+		"func":  "removePeer",
+		"mutex": "server",
+	}).Trace("unlocking")
+	server.mutex.Unlock()
 }
 
 func (server *Server) onReady(peer *peer.Peer) {
@@ -204,9 +234,7 @@ func (server *Server) onReady(peer *peer.Peer) {
 }
 
 func (server *Server) onDisconnected(peer *peer.Peer) {
-	server.mutex.Lock()
-	server.peers[peer.RemoteAddr().String()] = peer
-	server.mutex.Unlock()
+	server.removePeer(peer)
 
 	server.synchronizer.HandleDisconnectedPeer(peer)
 

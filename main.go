@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/EnsicoinDevs/eccd/consensus"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -17,6 +18,7 @@ var (
 )
 
 func init() {
+	pflag.StringP("level", "l", "info", "log level (trace, debug, info, error)")
 	pflag.IntP("port", "p", consensus.INGOING_PORT, "listening port")
 	pflag.Int("rpcport", consensus.INGOING_PORT+1, "rpc listening port")
 	pflag.StringP("cfgdir", "c", getAppConfigDir(), "config directory")
@@ -78,9 +80,23 @@ var rootCmd = &cobra.Command{
 	Use:   "eccd",
 	Short: "EnsiCoinCoin is a questionable implementation of the Ensicoin protocol",
 	Long:  `EnsiCoinCoin is a questionable implementation of the Ensicoin protocol. It is a daemon that allows you to synchronize with the blockchain.`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		switch viper.GetString("level") {
+		case "trace":
+			log.SetLevel(log.TraceLevel)
+		case "debug":
+			log.SetLevel(log.DebugLevel)
+		case "info":
+			log.SetLevel(log.InfoLevel)
+		case "error":
+			log.SetLevel(log.ErrorLevel)
+		default:
+			fmt.Println("Error: invalid log level")
+			cmd.Usage()
+			os.Exit(1)
+		}
+	},
 	Run: func(cmd *cobra.Command, args []string) {
-		pflag.Parse()
-
 		if err := launch(); err != nil {
 			os.Exit(1)
 		}
@@ -96,8 +112,6 @@ func main() {
 }
 
 func launch() error {
-	log.SetLevel(log.DebugLevel)
-
 	interruptListener := newInterruptListener()
 	defer log.Info("shutdown complete")
 

@@ -107,7 +107,15 @@ func (sync *Synchronizer) ProcessBlock(message *network.BlockMessage) {
 }
 
 func (sync *Synchronizer) HandleReadyPeer(peer *peer.Peer) {
+	log.WithFields(log.Fields{
+		"func":  "HandleReadyPeer",
+		"mutex": "synchronizer",
+	}).Trace("locking")
 	sync.mutex.Lock()
+	defer log.WithFields(log.Fields{
+		"func":  "HandleReadyPeer",
+		"mutex": "synchronizer",
+	}).Trace("unlocking")
 	defer sync.mutex.Unlock()
 
 	if sync.synchronizingPeer == nil {
@@ -118,7 +126,15 @@ func (sync *Synchronizer) HandleReadyPeer(peer *peer.Peer) {
 }
 
 func (sync *Synchronizer) HandleDisconnectedPeer(peer *peer.Peer) {
+	log.WithFields(log.Fields{
+		"func":  "HandleDisconnectedPeer",
+		"mutex": "synchronizer",
+	}).Trace("locking")
 	sync.mutex.Lock()
+	defer log.WithFields(log.Fields{
+		"func":  "HandleDisconnectedPeer",
+		"mutex": "synchronizer",
+	}).Trace("unlocking")
 	defer sync.mutex.Unlock()
 
 	if sync.synchronizingPeer == peer {

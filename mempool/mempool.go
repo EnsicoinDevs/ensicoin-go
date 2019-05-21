@@ -52,8 +52,16 @@ func (mempool *Mempool) Stop() error {
 }
 
 func (mempool *Mempool) FetchTxs() []*blockchain.Tx {
+	log.WithFields(log.Fields{
+		"func":  "FetchTxs",
+		"mutex": "mempool",
+	}).Trace("rlocking")
 	mempool.mutex.RLock()
 	defer mempool.mutex.RUnlock()
+	defer log.WithFields(log.Fields{
+		"func":  "FetchTxs",
+		"mutex": "mempool",
+	}).Trace("runlocking")
 
 	var txs []*blockchain.Tx
 
@@ -204,8 +212,16 @@ func (mempool *Mempool) processOrphans(tx *blockchain.Tx) []*utils.Hash {
 }
 
 func (mempool *Mempool) ProcessOrphans(tx *blockchain.Tx) []*utils.Hash {
+	log.WithFields(log.Fields{
+		"func":  "ProcessOrphans",
+		"mutex": "mempool",
+	}).Trace("locking")
 	mempool.mutex.Lock()
 	defer mempool.mutex.Unlock()
+	defer log.WithFields(log.Fields{
+		"func":  "ProcessOrphans",
+		"mutex": "mempool",
+	}).Trace("unlocking")
 
 	return mempool.processOrphans(tx)
 }
@@ -237,22 +253,46 @@ func (mempool *Mempool) processTx(tx *blockchain.Tx) []*utils.Hash {
 }
 
 func (mempool *Mempool) ProcessTx(tx *blockchain.Tx) []*utils.Hash {
+	defer log.WithFields(log.Fields{
+		"func":  "ProcessTx",
+		"mutex": "mempool",
+	}).Trace("locking")
 	mempool.mutex.Lock()
 	defer mempool.mutex.Unlock()
+	defer log.WithFields(log.Fields{
+		"func":  "Processtx",
+		"mutex": "mempool",
+	}).Trace("unlocking")
 
 	return mempool.processTx(tx)
 }
 
 func (mempool *Mempool) RemoveTx(tx *blockchain.Tx) {
+	defer log.WithFields(log.Fields{
+		"func":  "RemoveTx",
+		"mutex": "mempool",
+	}).Trace("locking")
 	mempool.mutex.Lock()
 	defer mempool.mutex.Unlock()
+	defer log.WithFields(log.Fields{
+		"func":  "RemoveTx",
+		"mutex": "mempool",
+	}).Trace("unlocking")
 
 	mempool.removeTx(tx)
 }
 
 func (mempool *Mempool) FindTxByHash(hash *utils.Hash) *blockchain.Tx {
+	defer log.WithFields(log.Fields{
+		"func":  "FindTxByHash",
+		"mutex": "mempool",
+	}).Trace("rlocking")
 	mempool.mutex.RLock()
 	defer mempool.mutex.RUnlock()
+	defer log.WithFields(log.Fields{
+		"func":  "FindTxByHash",
+		"mutex": "mempool",
+	}).Trace("runlocking")
 
 	return mempool.findTxByHash(hash)
 }

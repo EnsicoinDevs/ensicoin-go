@@ -46,25 +46,54 @@ func NewNotifier() *Notifier {
 func (n *Notifier) Subscribe() chan *Notification {
 	ch := make(chan *Notification)
 
+	log.WithFields(log.Fields{
+		"func":  "Subscribe",
+		"mutex": "rpcServer notifier",
+	}).Trace("locking")
 	n.mutex.Lock()
+
 	n.chans[ch] = struct{}{}
+
+	log.WithFields(log.Fields{
+		"func":  "Subscribe",
+		"mutex": "rpcServer notifier",
+	}).Trace("unlocking")
 	n.mutex.Unlock()
 
 	return ch
 }
 
 func (n *Notifier) Unsubscribe(ch chan *Notification) error {
+	log.WithFields(log.Fields{
+		"func":  "Unsubscribe",
+		"mutex": "rpcServer notifier",
+	}).Trace("locking")
 	n.mutex.Lock()
-	defer n.mutex.Unlock()
 
 	delete(n.chans, ch)
+
+	log.WithFields(log.Fields{
+		"func":  "Unsubscribe",
+		"mutex": "rpcServer notifier",
+	}).Trace("unlocking")
+	n.mutex.Unlock()
+
+	close(ch)
 
 	return nil
 }
 
 func (n *Notifier) Notify(notification *Notification) error {
+	log.WithFields(log.Fields{
+		"func":  "Notify",
+		"mutex": "rpcServer notifier",
+	}).Trace("rlocking")
 	n.mutex.RLock()
 	defer n.mutex.RUnlock()
+	defer log.WithFields(log.Fields{
+		"func":  "Notify",
+		"mutex": "rpcServer notifier",
+	}).Trace("runlocking")
 
 	for ch := range n.chans {
 		ch <- notification
@@ -142,22 +171,33 @@ func (s *rpcServer) Stop() error {
 }
 
 func (s *rpcServer) GetInfo(ctx context.Context, in *pb.GetInfoRequest) (*pb.GetInfoReply, error) {
+	log.WithField("request", "GetInfo").Trace("handling RPC request")
+	defer log.WithField("request", "GetInfo").Trace("RPC request done")
+
 	bestBlock, err := s.server.blockchain.FindBestBlock()
 	if err != nil {
 		return nil, fmt.Errorf("error finding the best block")
 	}
 
 	return &pb.GetInfoReply{
-		Implementation:  "eccd 0.0.0",
-		ProtocolVersion: 0,
-		BestBlockHash:   bestBlock.Hash().Bytes(),
+		Implementation:   "eccd 0.0.0",
+		ProtocolVersion:  0,
+		BestBlockHash:    bestBlock.Hash().Bytes(),
+		GenesisBlockHash: blockchain.GenesisBlock.Hash().Bytes(),
 	}, nil
 }
 
 func (s *rpcServer) GetBlockByHash(ctx context.Context, in *pb.GetBlockByHashRequest) (*pb.GetBlockByHashReply, error) {
+	log.WithField("request", "GetBlockByHash").Trace("handling RPC request")
+	defer log.WithField("request", "GetBlockByHash").Trace("RPC request done")
+
 	block, err := s.server.blockchain.FindBlockByHash(utils.NewHash(in.GetHash()))
 	if err != nil {
 		return nil, fmt.Errorf("error finding the block")
+	}
+
+	if block == nil {
+		return nil, status.Errorf(codes.NotFound, "block not found")
 	}
 
 	return &pb.GetBlockByHashReply{
@@ -166,6 +206,9 @@ func (s *rpcServer) GetBlockByHash(ctx context.Context, in *pb.GetBlockByHashReq
 }
 
 func (s *rpcServer) GetTxByHash(ctx context.Context, in *pb.GetTxByHashRequest) (*pb.GetTxByHashReply, error) {
+	log.WithField("request", "GetTxByHash").Trace("handling RPC request")
+	defer log.WithField("request", "GetTxByHash").Trace("RPC request done")
+
 	tx := s.server.mempool.FindTxByHash(utils.NewHash(in.GetHash()))
 
 	return &pb.GetTxByHashReply{
@@ -173,8 +216,40 @@ func (s *rpcServer) GetTxByHash(ctx context.Context, in *pb.GetTxByHashRequest) 
 	}, nil
 }
 
-func (s *rpcServer) GetBlockTemplate(in *pb.GetBlockTemplateRequest, stream pb.Node_GetBlockTemplateServer) error {
+func (s *rpcServer) GetBestBlocks(in *pb.GetBestBlocksRequest, stream pb.Node_GetBestBlocksServer) error {
+	log.WithField("request", "GetBestBlocks").Trace("handling RPC request")
+	defer log.WithField("request", "GetBestBlocks").Trace("RPC request done")
+
 	ch := s.notifier.Subscribe()
+	defer s.notifier.Unsubscribe(ch)
+
+	for {
+		select {
+		case notification := <-ch:
+			switch notification.Type {
+			case NOTIFICATION_PUSHED_BLOCK:
+				fallthrough
+			case NOTIFICATION_POPPED_BLOCK:
+				reply := &pb.GetBestBlocksReply{
+					Hash: notification.Block.Hash().Bytes(),
+				}
+
+				if err := stream.Send(reply); err != nil {
+					return nil
+				}
+			}
+		case <-s.quit:
+			return nil
+		}
+	}
+}
+
+func (s *rpcServer) GetBlockTemplate(in *pb.GetBlockTemplateRequest, stream pb.Node_GetBlockTemplateServer) error {
+	log.WithField("request", "GetBlockTemplate").Trace("handling RPC request")
+	defer log.WithField("request", "GetBlockTemplate").Trace("RPC request done")
+
+	ch := s.notifier.Subscribe()
+	defer s.notifier.Unsubscribe(ch)
 
 	bestBlock, err := s.server.blockchain.FindBestBlock()
 	if err != nil {
@@ -195,6 +270,7 @@ func (s *rpcServer) GetBlockTemplate(in *pb.GetBlockTemplateRequest, stream pb.N
 			case NOTIFICATION_PUSHED_BLOCK:
 				fallthrough
 			case NOTIFICATION_POPPED_BLOCK:
+
 				timestamp := time.Now()
 
 				nextTarget, err := s.server.blockchain.CalcNextBlockDifficulty(notification.Block, blockchain.NewBlockFromBlockMessage(&network.BlockMessage{
@@ -235,6 +311,9 @@ func (s *rpcServer) GetBlockTemplate(in *pb.GetBlockTemplateRequest, stream pb.N
 }
 
 func (s *rpcServer) PublishRawBlock(ctx context.Context, in *pb.PublishRawBlockRequest) (*pb.PublishRawBlockReply, error) {
+	log.WithField("request", "PublishRawBlock").Trace("handling RPC request")
+	defer log.WithField("request", "PublishRawBlock").Trace("RPC request done")
+
 	blockMsg := network.NewBlockMessage()
 
 	err := blockMsg.Decode(bytes.NewReader(in.GetRawBlock()))
@@ -248,6 +327,9 @@ func (s *rpcServer) PublishRawBlock(ctx context.Context, in *pb.PublishRawBlockR
 }
 
 func (s *rpcServer) PublishRawTx(ctx context.Context, in *pb.PublishRawTxRequest) (*pb.PublishRawTxReply, error) {
+	log.WithField("request", "PublishRawTx").Trace("handling RPC request")
+	defer log.WithField("request", "PublishRawTx").Trace("RPC request done")
+
 	txMsg := network.NewTxMessage()
 
 	err := txMsg.Decode(bytes.NewReader(in.GetRawTx()))
@@ -261,6 +343,9 @@ func (s *rpcServer) PublishRawTx(ctx context.Context, in *pb.PublishRawTxRequest
 }
 
 func (s *rpcServer) ConnectPeer(ctx context.Context, in *pb.ConnectPeerRequest) (*pb.ConnectPeerReply, error) {
+	log.WithField("request", "ConnectPeer").Trace("handling RPC request")
+	defer log.WithField("request", "ConnectPeer").Trace("RPC request done")
+
 	if in.GetPeer() == nil {
 		return nil, status.Errorf(codes.InvalidArgument, "peer field is required")
 	}
@@ -282,6 +367,9 @@ func (s *rpcServer) ConnectPeer(ctx context.Context, in *pb.ConnectPeerRequest) 
 }
 
 func (s *rpcServer) DisconnectPeer(ctx context.Context, in *pb.DisconnectPeerRequest) (*pb.DisconnectPeerReply, error) {
+	log.WithField("request", "DisconnectPeer").Trace("handling RPC request")
+	defer log.WithField("request", "DisconnectPeer").Trace("RPC request done")
+
 	if in.GetPeer() == nil {
 		return nil, status.Errorf(codes.InvalidArgument, "peer field is required")
 	}
