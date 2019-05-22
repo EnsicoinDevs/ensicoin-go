@@ -57,7 +57,7 @@ func (sync *Synchronizer) OnPushedBlock(block *blockchain.Block) error {
 	log.WithFields(log.Fields{
 		"hash":   hex.EncodeToString(block.Msg.Header.Hash()[:]),
 		"height": block.Msg.Header.Height,
-	}).Info("block pushed")
+	}).Info("best block updated")
 
 	return sync.handlePushedBlock(block)
 }
@@ -66,7 +66,7 @@ func (sync *Synchronizer) OnPoppedBlock(block *blockchain.Block) error {
 	log.WithFields(log.Fields{
 		"hash":   hex.EncodeToString(block.Msg.Header.Hash()[:]),
 		"height": block.Msg.Header.Height,
-	}).Info("block popped")
+	}).Info("best block updated")
 
 	return sync.handlePoppedBlock(block)
 }

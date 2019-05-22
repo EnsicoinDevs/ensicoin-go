@@ -1017,15 +1017,12 @@ func (blockchain *Blockchain) popBlock(block *Block) error {
 func (blockchain *Blockchain) findForkingBlock(blockA *Block, blockB *Block) (*Block, error) {
 	var err error
 
-	// If blockB height is superior to blockA height, we walk back to the blockA height
+	// blockA must be the higher block
 	for blockB.Msg.Header.Height > blockA.Msg.Header.Height {
-		blockB, err = blockchain.findBlockByHash(blockB.Msg.Header.HashPrevBlock)
-		if err != nil {
-			return nil, err
-		}
+		blockA, blockB = blockB, blockA
 	}
 
-	// Same with blockA
+	// If blockA height is superior to blockB height, we walk back to the blockB height
 	for blockA.Msg.Header.Height > blockB.Msg.Header.Height {
 		blockA, err = blockchain.findBlockByHash(blockA.Msg.Header.HashPrevBlock)
 		if err != nil {

@@ -1,7 +1,6 @@
 package peer
 
 import (
-	"fmt"
 	"github.com/EnsicoinDevs/eccd/network"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -40,7 +39,7 @@ type Peer struct {
 }
 
 func (peer Peer) String() string {
-	return fmt.Sprintf("Peer[addr=%s]", peer.conn.RemoteAddr().String())
+	return peer.RemoteAddr().String()
 }
 
 func NewPeer(conn net.Conn, config *Config, ingoing bool) *Peer {
@@ -126,7 +125,7 @@ func (peer *Peer) RemoteAddr() net.Addr {
 func (peer *Peer) negotiate() error {
 	if peer.Outgoing() {
 		// > whoami
-		err := peer.Send(&network.WhoamiMessage{
+		err := peer.send(&network.WhoamiMessage{
 			Version: 0,
 			From: &network.Address{
 				Timestamp: time.Now(),
@@ -165,7 +164,7 @@ func (peer *Peer) negotiate() error {
 		_ = whoamiack
 
 		// > whoamiack
-		err = peer.Send(&network.WhoamiAckMessage{})
+		err = peer.send(&network.WhoamiAckMessage{})
 		if err != nil {
 			return err
 		}
@@ -184,7 +183,7 @@ func (peer *Peer) negotiate() error {
 		_ = whoami
 
 		// > whoami
-		err = peer.Send(&network.WhoamiMessage{
+		err = peer.send(&network.WhoamiMessage{
 			Version: 0,
 			From: &network.Address{
 				Timestamp: time.Now(),
@@ -197,7 +196,7 @@ func (peer *Peer) negotiate() error {
 		}
 
 		// > whoamiack
-		err = peer.Send(&network.WhoamiAckMessage{})
+		err = peer.send(&network.WhoamiAckMessage{})
 		if err != nil {
 			return err
 		}
@@ -219,6 +218,11 @@ func (peer *Peer) negotiate() error {
 }
 
 func (peer *Peer) handleMessage(message network.Message) {
+	log.WithFields(log.Fields{
+		"peer":    peer,
+		"message": message.MsgType(),
+	}).Debug("message received")
+
 	switch message.MsgType() {
 	case "inv":
 		m := message.(*network.InvMessage)
@@ -299,6 +303,11 @@ func (peer *Peer) handleOutgoingMessages() {
 	for {
 		select {
 		case message := <-peer.sending:
+			log.WithFields(log.Fields{
+				"peer":    peer,
+				"message": message.MsgType(),
+			}).Debug("sending message")
+
 			if err := peer.send(message); err != nil {
 				log.WithError(err).Error("error sending a message")
 			}
