@@ -125,7 +125,7 @@ func (peer *Peer) RemoteAddr() net.Addr {
 func (peer *Peer) negotiate() error {
 	if peer.Outgoing() {
 		// > whoami
-		err := peer.send(&network.WhoamiMessage{
+		err := peer.Send(&network.WhoamiMessage{
 			Version: 0,
 			From: &network.Address{
 				Timestamp: time.Now(),
@@ -164,7 +164,7 @@ func (peer *Peer) negotiate() error {
 		_ = whoamiack
 
 		// > whoamiack
-		err = peer.send(&network.WhoamiAckMessage{})
+		err = peer.Send(&network.WhoamiAckMessage{})
 		if err != nil {
 			return err
 		}
@@ -183,7 +183,7 @@ func (peer *Peer) negotiate() error {
 		_ = whoami
 
 		// > whoami
-		err = peer.send(&network.WhoamiMessage{
+		err = peer.Send(&network.WhoamiMessage{
 			Version: 0,
 			From: &network.Address{
 				Timestamp: time.Now(),
@@ -196,7 +196,7 @@ func (peer *Peer) negotiate() error {
 		}
 
 		// > whoamiack
-		err = peer.send(&network.WhoamiAckMessage{})
+		err = peer.Send(&network.WhoamiAckMessage{})
 		if err != nil {
 			return err
 		}
