@@ -135,8 +135,8 @@ func (server *Server) IsStopping() bool {
 }
 
 func (server *Server) OnPushedBlock(block *blockchain.Block) error {
-	go server.synchronizer.OnPushedBlock(block)
-	go server.rpcServer.OnPushedBlock(block)
+	server.synchronizer.OnPushedBlock(block)
+	server.rpcServer.OnPushedBlock(block)
 
 	return nil
 }
@@ -289,7 +289,7 @@ func (server *Server) onGetData(peer *peer.Peer, message *network.GetDataMessage
 			}
 
 			if block == nil {
-				// TODO: send a NotFound message
+				continue
 			}
 
 			peer.Send(block.Msg)
@@ -305,15 +305,15 @@ func (server *Server) onGetBlocks(peer *peer.Peer, message *network.GetBlocksMes
 	var startAt *utils.Hash
 
 	for _, hash := range message.BlockLocator {
-		block, err := server.blockchain.FindBlockByHash(hash)
+		haveBlock, err := server.blockchain.HaveBlock(hash)
 		if err != nil {
 			log.WithFields(log.Fields{
 				"peer": peer,
-			}).WithError(err).Error("error finding a block by hash")
+			}).WithError(err).Error("error checking if a block exists")
 			continue
 		}
 
-		if block == nil {
+		if !haveBlock {
 			continue
 		}
 

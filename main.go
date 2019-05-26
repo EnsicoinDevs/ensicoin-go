@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/pprof"
 )
 
 var (
@@ -23,6 +24,7 @@ func init() {
 	pflag.Int("rpcport", consensus.INGOING_PORT+1, "rpc listening port")
 	pflag.StringP("cfgdir", "c", getAppConfigDir(), "config directory")
 	pflag.StringP("datadir", "d", getAppDataDir(), "data directory")
+	pflag.String("cpuprofile", "", "write cpu profile to file")
 
 	viper.BindPFlags(pflag.CommandLine)
 
@@ -118,6 +120,16 @@ func launch() error {
 	if err := checkDataDir(); err != nil {
 		log.WithError(err).Fatal("fatal error checking the data dir")
 		os.Exit(1)
+	}
+
+	if viper.GetString("cpuprofile") != "" {
+		f, err := os.Create(viper.GetString("cpuprofile"))
+		if err != nil {
+			log.WithError(err).Fatal("fatal error creating the cpuprofile file")
+		}
+
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
 	}
 
 	log.Info("version 0.0.0")

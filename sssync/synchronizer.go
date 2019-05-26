@@ -9,6 +9,7 @@ import (
 	"github.com/EnsicoinDevs/eccd/utils"
 	log "github.com/sirupsen/logrus"
 	"sync"
+	"time"
 )
 
 type Config struct {
@@ -59,7 +60,24 @@ func (sync *Synchronizer) OnPushedBlock(block *blockchain.Block) error {
 		"height": block.Msg.Header.Height,
 	}).Info("best block updated")
 
-	return sync.handlePushedBlock(block)
+	log.Debug("removing tx from mempool")
+
+	for _, tx := range block.Txs[1:] {
+		sync.mempool.RemoveTx(tx)
+	}
+
+	log.Debug("broadcasting")
+
+	sync.config.Broadcast(&network.InvMessage{
+		Inventory: []*network.InvVect{
+			&network.InvVect{
+				InvType: network.INV_VECT_BLOCK,
+				Hash:    block.Hash(),
+			},
+		},
+	})
+
+	return nil
 }
 
 func (sync *Synchronizer) OnPoppedBlock(block *blockchain.Block) error {
@@ -76,12 +94,12 @@ func (sync *Synchronizer) HandleBlockInvVect(peer *peer.Peer, invVect *network.I
 		panic("the invtype of the invvect is not block")
 	}
 
-	block, err := sync.blockchain.FindBlockByHash(invVect.Hash)
+	haveBlock, err := sync.blockchain.HaveBlock(invVect.Hash)
 	if err != nil {
 		return err
 	}
 
-	if block == nil {
+	if !haveBlock {
 		peer.Send(&network.GetDataMessage{
 			Inventory: []*network.InvVect{invVect},
 		})
@@ -95,6 +113,8 @@ func (sync *Synchronizer) HandleBlock(peer *peer.Peer, message *network.BlockMes
 }
 
 func (sync *Synchronizer) ProcessBlock(message *network.BlockMessage) {
+	log.Debug("processing a block")
+	start := time.Now()
 	valid, err := sync.blockchain.ProcessBlock(blockchain.NewBlockFromBlockMessage(message))
 	if err != nil {
 		log.WithError(err).WithField("hash", hex.EncodeToString(message.Header.Hash()[:])).Error("error processing a block")
@@ -104,6 +124,7 @@ func (sync *Synchronizer) ProcessBlock(message *network.BlockMessage) {
 		log.WithField("hash", hex.EncodeToString(message.Header.Hash()[:])).WithField("error", valid).Info("processed an invalid block")
 		return
 	}
+	log.Debugf("time elapsed: %s", time.Since(start))
 }
 
 func (sync *Synchronizer) HandleReadyPeer(peer *peer.Peer) {
@@ -143,37 +164,16 @@ func (sync *Synchronizer) HandleDisconnectedPeer(peer *peer.Peer) {
 }
 
 func (sync *Synchronizer) synchronize() {
-	bestBlock, err := sync.blockchain.FindBestBlock()
+	blockLocator, err := sync.blockchain.GenerateBlockLocator()
 	if err != nil {
-		log.WithError(err).Error("error finding the longest chain")
+		log.WithError(err).Error("error generating the block locator")
 		return
 	}
 
 	sync.synchronizingPeer.Send(&network.GetBlocksMessage{
-		BlockLocator: []*utils.Hash{bestBlock.Hash(), blockchain.GenesisBlock.Hash()},
+		BlockLocator: blockLocator,
 		HashStop:     utils.NewHash(nil),
 	})
-}
-
-func (sync *Synchronizer) handlePushedBlock(block *blockchain.Block) error {
-	log.Debug("removing tx from mempool")
-
-	for _, tx := range block.Txs {
-		sync.mempool.RemoveTx(tx)
-	}
-
-	log.Debug("broadcasting")
-
-	sync.config.Broadcast(&network.InvMessage{
-		Inventory: []*network.InvVect{
-			&network.InvVect{
-				InvType: network.INV_VECT_BLOCK,
-				Hash:    block.Hash(),
-			},
-		},
-	})
-
-	return nil
 }
 
 func (sync *Synchronizer) handlePoppedBlock(block *blockchain.Block) error {

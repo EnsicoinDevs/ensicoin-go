@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/EnsicoinDevs/eccd/blockchain"
+	"github.com/EnsicoinDevs/eccd/consensus"
 	"github.com/EnsicoinDevs/eccd/network"
 	pb "github.com/EnsicoinDevs/eccd/rpc"
 	"github.com/EnsicoinDevs/eccd/utils"
@@ -112,7 +113,7 @@ type rpcServer struct {
 }
 
 func (s *rpcServer) OnPushedBlock(block *blockchain.Block) error {
-	go s.notifier.Notify(&Notification{
+	s.notifier.Notify(&Notification{
 		Type:  NOTIFICATION_PUSHED_BLOCK,
 		Block: block,
 	})
@@ -121,7 +122,7 @@ func (s *rpcServer) OnPushedBlock(block *blockchain.Block) error {
 }
 
 func (s *rpcServer) OnPoppedBlock(block *blockchain.Block) error {
-	go s.notifier.Notify(&Notification{
+	s.notifier.Notify(&Notification{
 		Type:  NOTIFICATION_POPPED_BLOCK,
 		Block: block,
 	})
@@ -270,17 +271,33 @@ func (s *rpcServer) GetBlockTemplate(in *pb.GetBlockTemplateRequest, stream pb.N
 			case NOTIFICATION_PUSHED_BLOCK:
 				fallthrough
 			case NOTIFICATION_POPPED_BLOCK:
-
 				timestamp := time.Now()
 
-				nextTarget, err := s.server.blockchain.CalcNextBlockDifficulty(notification.Block, blockchain.NewBlockFromBlockMessage(&network.BlockMessage{
-					Header: &network.BlockHeader{
-						Height:    notification.Block.Msg.Header.Height + 1,
-						Timestamp: timestamp,
-					},
-				}))
-				if err != nil {
-					return status.Errorf(codes.Internal, "internal error")
+				nextTarget := notification.Block.Msg.Header.Target
+				if notification.Block.Msg.Header.Height+1 >= consensus.BLOCKS_PER_RETARGET {
+					ancestor := &blockchain.GenesisBlock
+
+					if notification.Block.Msg.Header.Height+1 > consensus.BLOCKS_PER_RETARGET {
+						ancestorHash, err := s.server.blockchain.GetAncestor(notification.Block.Hash())
+						if err != nil {
+							return status.Errorf(codes.Internal, "internal error")
+						}
+
+						ancestorHash, err = s.server.blockchain.GetFollowing(ancestorHash)
+						if err != nil {
+							return status.Errorf(codes.Internal, "internal error")
+						}
+
+						ancestor, err = s.server.blockchain.FindBlockByHash(ancestorHash)
+						if err != nil {
+							return status.Errorf(codes.Internal, "internal error")
+						}
+					}
+
+					nextTarget, err = s.server.blockchain.CalcNextBlockDifficulty(timestamp, ancestor.Msg.Header.Timestamp, ancestor.Msg.Header.Target)
+					if err != nil {
+						return status.Errorf(codes.Internal, "internal error")
+					}
 				}
 
 				reply := &pb.GetBlockTemplateReply{
