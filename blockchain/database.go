@@ -27,6 +27,10 @@ func dbStoreStxojEntry(tx *bolt.Tx, hash *utils.Hash, stxoj []*UtxoEntry) error 
 	return b.Put(hash.Bytes(), buf.Bytes())
 }
 
+func dbRemoveStxojEntry(tx *bolt.Tx, hash *utils.Hash) error {
+	return tx.Bucket(followingBucket).Delete(hash.Bytes())
+}
+
 func dbStoreUtxos(tx *bolt.Tx, utxos *Utxos) error {
 	if err := tx.DeleteBucket(utxosBucket); err != nil {
 		return err
@@ -65,4 +69,8 @@ func dbStoreBlockHashAtHeight(tx *bolt.Tx, hash *utils.Hash, height uint32) erro
 
 func dbStoreFollowing(tx *bolt.Tx, prevHash *utils.Hash, hash *utils.Hash) error {
 	return tx.Bucket(followingBucket).Put(prevHash.Bytes(), hash.Bytes())
+}
+
+func dbRemoveFollowing(tx *bolt.Tx, prevHash *utils.Hash) error {
+	return tx.Bucket(followingBucket).Delete(prevHash.Bytes())
 }

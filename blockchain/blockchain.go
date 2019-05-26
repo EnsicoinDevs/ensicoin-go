@@ -626,14 +626,6 @@ func (blockchain *Blockchain) GetAncestor(blockHash *utils.Hash) (*utils.Hash, e
 	return ancestorHash, nil
 }
 
-func (blockchain *Blockchain) removeFollowing(blockHash *utils.Hash) error {
-	return blockchain.db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket(followingBucket)
-
-		return b.Delete(blockHash.Bytes())
-	})
-}
-
 func (blockchain *Blockchain) GetFollowing(blockHash *utils.Hash) (*utils.Hash, error) {
 	var followingHash *utils.Hash
 
@@ -653,14 +645,6 @@ func (blockchain *Blockchain) GetFollowing(blockHash *utils.Hash) (*utils.Hash, 
 	}
 
 	return followingHash, nil
-}
-
-func (blockchain *Blockchain) removeStxojEntry(blockHash *utils.Hash) error {
-	return blockchain.db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket(stxojBucket)
-
-		return b.Delete(blockHash.Bytes())
-	})
 }
 
 func (blockchain *Blockchain) fetchStxojEntry(blockHash *utils.Hash) ([]*UtxoEntry, error) {
@@ -853,22 +837,20 @@ func (blockchain *Blockchain) popBlock(block *Block) error {
 	}
 
 	if err = blockchain.db.Update(func(tx *bolt.Tx) error {
-		return dbStoreUtxos(tx, utxos)
-	}); err != nil {
-		return err
-	}
+		var err error
 
-	err = blockchain.removeStxojEntry(block.Hash())
-	if err != nil {
-		return err
-	}
+		if err = dbStoreUtxos(tx, utxos); err != nil {
+			return err
+		}
 
-	err = blockchain.removeFollowing(block.Msg.Header.HashPrevBlock)
-	if err != nil {
-		return err
-	}
+		if err = dbRemoveStxojEntry(tx, block.Hash()); err != nil {
+			return err
+		}
 
-	if err = blockchain.db.Update(func(tx *bolt.Tx) error {
+		if err = dbRemoveFollowing(tx, block.Msg.Header.HashPrevBlock); err != nil {
+			return err
+		}
+
 		return dbStoreBestBlock(tx, block.Msg.Header.HashPrevBlock)
 	}); err != nil {
 		return err
