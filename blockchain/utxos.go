@@ -63,6 +63,9 @@ func ReadUtxoEntry(reader io.Reader) (*UtxoEntry, error) {
 
 	entry.script = make([]byte, scriptLength)
 	_, err = io.ReadFull(reader, entry.script)
+	if err != nil {
+		return nil, err
+	}
 
 	coinBase := make([]byte, 1)
 	_, err = reader.Read(coinBase)
