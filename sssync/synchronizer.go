@@ -70,7 +70,7 @@ func (sync *Synchronizer) OnPushedBlock(block *blockchain.Block) error {
 
 	sync.config.Broadcast(&network.InvMessage{
 		Inventory: []*network.InvVect{
-			&network.InvVect{
+			{
 				InvType: network.INV_VECT_BLOCK,
 				Hash:    block.Hash(),
 			},

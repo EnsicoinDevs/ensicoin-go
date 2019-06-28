@@ -155,7 +155,7 @@ func (mempool *Mempool) validateTx(tx *blockchain.Tx) (bool, []*utils.Hash) {
 		}
 
 		var missingParents []*utils.Hash
-		for txHash, _ := range encountered {
+		for txHash := range encountered {
 			missingParents = append(missingParents, txHash)
 		}
 
