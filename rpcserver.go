@@ -20,32 +20,32 @@ import (
 	"time"
 )
 
-type NotificationType int
+type notificationType int
 
 const (
-	NOTIFICATION_PUSHED_BLOCK = iota
-	NOTIFICATION_POPPED_BLOCK
+	notificationPushedBlock = iota
+	notificationPoppedBlock
 )
 
-type Notification struct {
-	Type  NotificationType
+type notification struct {
+	Type  notificationType
 	Block *blockchain.Block
 }
 
-type Notifier struct {
+type notifier struct {
 	mutex sync.RWMutex
-	chans map[chan *Notification]struct{}
+	chans map[chan *notification]struct{}
 }
 
-func NewNotifier() *Notifier {
-	return &Notifier{
+func newNotifier() *notifier {
+	return &notifier{
 		mutex: sync.RWMutex{},
-		chans: make(map[chan *Notification]struct{}),
+		chans: make(map[chan *notification]struct{}),
 	}
 }
 
-func (n *Notifier) Subscribe() chan *Notification {
-	ch := make(chan *Notification)
+func (n *notifier) Subscribe() chan *notification {
+	ch := make(chan *notification)
 
 	log.WithFields(log.Fields{
 		"func":  "Subscribe",
@@ -64,7 +64,7 @@ func (n *Notifier) Subscribe() chan *Notification {
 	return ch
 }
 
-func (n *Notifier) Unsubscribe(ch chan *Notification) error {
+func (n *notifier) Unsubscribe(ch chan *notification) error {
 	log.WithFields(log.Fields{
 		"func":  "Unsubscribe",
 		"mutex": "rpcServer notifier",
@@ -84,7 +84,7 @@ func (n *Notifier) Unsubscribe(ch chan *Notification) error {
 	return nil
 }
 
-func (n *Notifier) Notify(notification *Notification) error {
+func (n *notifier) Notify(notification *notification) error {
 	log.WithFields(log.Fields{
 		"func":  "Notify",
 		"mutex": "rpcServer notifier",
@@ -107,14 +107,14 @@ type rpcServer struct {
 	server     *Server
 	grpcServer *grpc.Server
 
-	notifier *Notifier
+	notifier *notifier
 
 	quit chan struct{}
 }
 
 func (s *rpcServer) OnPushedBlock(block *blockchain.Block) error {
-	s.notifier.Notify(&Notification{
-		Type:  NOTIFICATION_PUSHED_BLOCK,
+	s.notifier.Notify(&notification{
+		Type:  notificationPushedBlock,
 		Block: block,
 	})
 
@@ -122,8 +122,8 @@ func (s *rpcServer) OnPushedBlock(block *blockchain.Block) error {
 }
 
 func (s *rpcServer) OnPoppedBlock(block *blockchain.Block) error {
-	s.notifier.Notify(&Notification{
-		Type:  NOTIFICATION_POPPED_BLOCK,
+	s.notifier.Notify(&notification{
+		Type:  notificationPoppedBlock,
 		Block: block,
 	})
 
@@ -134,10 +134,10 @@ func (s *rpcServer) HandleAcceptedTx(tx *blockchain.Tx) error {
 	return nil
 }
 
-func newRpcServer(server *Server) *rpcServer {
+func newRPCServer(server *Server) *rpcServer {
 	return &rpcServer{
 		server:   server,
-		notifier: NewNotifier(),
+		notifier: newNotifier(),
 		quit:     make(chan struct{}),
 	}
 }
@@ -202,7 +202,7 @@ func (s *rpcServer) GetBlockByHash(ctx context.Context, in *pb.GetBlockByHashReq
 	}
 
 	return &pb.GetBlockByHashReply{
-		Block: BlockMessageToRpcBlock(block.Msg),
+		Block: blockMessageToRPCBlock(block.Msg),
 	}, nil
 }
 
@@ -213,7 +213,7 @@ func (s *rpcServer) GetTxByHash(ctx context.Context, in *pb.GetTxByHashRequest) 
 	tx := s.server.mempool.FindTxByHash(utils.NewHash(in.GetHash()))
 
 	return &pb.GetTxByHashReply{
-		Tx: TxMessageToRpcTx(tx.Msg),
+		Tx: txMessageToRPCTx(tx.Msg),
 	}, nil
 }
 
@@ -228,9 +228,9 @@ func (s *rpcServer) GetBestBlocks(in *pb.GetBestBlocksRequest, stream pb.Node_Ge
 		select {
 		case notification := <-ch:
 			switch notification.Type {
-			case NOTIFICATION_PUSHED_BLOCK:
+			case notificationPushedBlock:
 				fallthrough
-			case NOTIFICATION_POPPED_BLOCK:
+			case notificationPoppedBlock:
 				reply := &pb.GetBestBlocksReply{
 					Hash: notification.Block.Hash().Bytes(),
 				}
@@ -258,8 +258,8 @@ func (s *rpcServer) GetBlockTemplate(in *pb.GetBlockTemplateRequest, stream pb.N
 	}
 
 	go func() {
-		ch <- &Notification{
-			Type:  NOTIFICATION_PUSHED_BLOCK,
+		ch <- &notification{
+			Type:  notificationPushedBlock,
 			Block: bestBlock,
 		}
 	}()
@@ -268,9 +268,9 @@ func (s *rpcServer) GetBlockTemplate(in *pb.GetBlockTemplateRequest, stream pb.N
 		select {
 		case notification := <-ch:
 			switch notification.Type {
-			case NOTIFICATION_PUSHED_BLOCK:
+			case notificationPushedBlock:
 				fallthrough
-			case NOTIFICATION_POPPED_BLOCK:
+			case notificationPoppedBlock:
 				timestamp := time.Now()
 
 				nextTarget := notification.Block.Msg.Header.Target
@@ -314,7 +314,7 @@ func (s *rpcServer) GetBlockTemplate(in *pb.GetBlockTemplateRequest, stream pb.N
 				txs := s.server.mempool.FetchTxs()
 
 				for _, tx := range txs {
-					reply.Txs = append(reply.Txs, TxMessageToRpcTx(tx.Msg))
+					reply.Txs = append(reply.Txs, txMessageToRPCTx(tx.Msg))
 				}
 
 				if err := stream.Send(reply); err != nil {
@@ -417,7 +417,7 @@ func (s *rpcServer) DisconnectPeer(ctx context.Context, in *pb.DisconnectPeerReq
 	return &pb.DisconnectPeerReply{}, nil
 }
 
-func BlockMessageToRpcBlock(blockMsg *network.BlockMessage) *pb.Block {
+func blockMessageToRPCBlock(blockMsg *network.BlockMessage) *pb.Block {
 	block := &pb.Block{
 		Hash:       blockMsg.Header.Hash().Bytes(),
 		Version:    blockMsg.Header.Version,
@@ -430,13 +430,13 @@ func BlockMessageToRpcBlock(blockMsg *network.BlockMessage) *pb.Block {
 	}
 
 	for _, tx := range blockMsg.Txs {
-		block.Txs = append(block.Txs, TxMessageToRpcTx(tx))
+		block.Txs = append(block.Txs, txMessageToRPCTx(tx))
 	}
 
 	return block
 }
 
-func TxMessageToRpcTx(txMsg *network.TxMessage) *pb.Tx {
+func txMessageToRPCTx(txMsg *network.TxMessage) *pb.Tx {
 	tx := &pb.Tx{
 		Hash:    txMsg.Hash().Bytes(),
 		Version: txMsg.Version,

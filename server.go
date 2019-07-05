@@ -15,6 +15,7 @@ import (
 	"sync"
 )
 
+// Server provides an ensicoin server for handling communications to and from ensicoin peers.
 type Server struct {
 	blockchain   *blockchain.Blockchain
 	mempool      *mempool.Mempool
@@ -29,6 +30,7 @@ type Server struct {
 	quit chan struct{}
 }
 
+// NewServer returns a new Server instance.
 func NewServer() *Server {
 	server := &Server{
 		mutex: &sync.RWMutex{},
@@ -39,11 +41,11 @@ func NewServer() *Server {
 
 	server.blockchain = blockchain.NewBlockchain(&blockchain.Config{
 		DataDir:       viper.GetString("datadir"),
-		OnPushedBlock: server.OnPushedBlock,
-		OnPoppedBlock: server.OnPoppedBlock,
+		OnPushedBlock: server.onPushedBlock,
+		OnPoppedBlock: server.onPoppedBlock,
 	})
 
-	server.rpcServer = newRpcServer(server)
+	server.rpcServer = newRPCServer(server)
 
 	server.mempool = mempool.NewMempool(&mempool.Config{
 		FetchUtxos:   server.blockchain.FetchUtxos,
@@ -57,6 +59,7 @@ func NewServer() *Server {
 	return server
 }
 
+// Start starts the server.
 func (server *Server) Start() {
 	go server.blockchain.Load()
 	go server.mempool.Start()
@@ -83,25 +86,26 @@ func (server *Server) Start() {
 			}
 
 			return
-		} else {
-			peer := peer.NewPeer(conn, &peer.Config{
-				Callbacks: peer.PeerCallbacks{
-					OnReady:        server.onReady,
-					OnDisconnected: server.onDisconnected,
-					OnGetData:      server.onGetData,
-					OnGetBlocks:    server.onGetBlocks,
-					OnInv:          server.onInv,
-					OnBlock:        server.onBlock,
-				},
-			}, true)
-
-			log.WithField("peer", peer).Info("new incoming connection")
-
-			go peer.Start()
 		}
+
+		peer := peer.NewPeer(conn, &peer.Config{
+			Callbacks: peer.PeerCallbacks{
+				OnReady:        server.onReady,
+				OnDisconnected: server.onDisconnected,
+				OnGetData:      server.onGetData,
+				OnGetBlocks:    server.onGetBlocks,
+				OnInv:          server.onInv,
+				OnBlock:        server.onBlock,
+			},
+		}, true)
+
+		log.WithField("peer", peer).Info("new incoming connection")
+
+		go peer.Start()
 	}
 }
 
+// Stop stops the server.
 func (server *Server) Stop() error {
 	log.Debug("server shutting down")
 	defer log.Debug("server shutdown complete")
@@ -128,26 +132,21 @@ func (server *Server) Stop() error {
 	return server.blockchain.Stop()
 }
 
-func (server *Server) IsStopping() bool {
-	_, ok := <-server.quit
-
-	return !ok
-}
-
-func (server *Server) OnPushedBlock(block *blockchain.Block) error {
+func (server *Server) onPushedBlock(block *blockchain.Block) error {
 	server.synchronizer.OnPushedBlock(block)
 	server.rpcServer.OnPushedBlock(block)
 
 	return nil
 }
 
-func (server *Server) OnPoppedBlock(block *blockchain.Block) error {
+func (server *Server) onPoppedBlock(block *blockchain.Block) error {
 	go server.synchronizer.OnPoppedBlock(block)
 	go server.rpcServer.OnPoppedBlock(block)
 
 	return nil
 }
 
+// ConnectTo creates a new peer and connect the server to it.
 func (server *Server) ConnectTo(address string) error {
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
@@ -169,10 +168,12 @@ func (server *Server) ConnectTo(address string) error {
 	return nil
 }
 
+// DisconnectFrom disconnects the server from a peer.
 func (server *Server) DisconnectFrom(peer *peer.Peer) error {
 	return peer.Stop()
 }
 
+// FindPeerByAddress searches for a peer using its external address.
 func (server *Server) FindPeerByAddress(address string) (*peer.Peer, error) {
 	log.WithFields(log.Fields{
 		"func":  "FindPeerByAddress",
@@ -188,6 +189,7 @@ func (server *Server) FindPeerByAddress(address string) (*peer.Peer, error) {
 	return server.peers[address], nil
 }
 
+// Broadcast broadcasts a message to all connected peers.
 func (server *Server) Broadcast(message network.Message) error {
 	for _, peer := range server.peers {
 		peer.Send(message)
@@ -261,10 +263,12 @@ func (server *Server) onBlock(peer *peer.Peer, message *network.BlockMessage) {
 	server.synchronizer.HandleBlock(peer, message)
 }
 
+// ProcessBlock validates a block.
 func (server *Server) ProcessBlock(message *network.BlockMessage) {
 	server.synchronizer.ProcessBlock(message)
 }
 
+// ProcessTx validates a tx.
 func (server *Server) ProcessTx(message *network.TxMessage) {
 	server.mempool.ProcessTx(blockchain.NewTxFromTxMessage(message))
 }

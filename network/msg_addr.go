@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// Address represents the message addr.
 type Address struct {
 	Timestamp time.Time
 	IP        net.IP

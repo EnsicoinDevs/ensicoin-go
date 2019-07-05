@@ -7,6 +7,7 @@ import (
 	"io"
 )
 
+// Message represents a message following the Ensicoin protocol.
 type Message interface {
 	Decode(io.Reader) error
 	Encode(io.Writer) error
@@ -97,6 +98,7 @@ func newMessageByType(msgType string) (Message, error) {
 	return msg, nil
 }
 
+// ReadMessage decodes a raw message from a io.Reader.
 func ReadMessage(reader io.Reader) (Message, error) {
 	header, err := readMessageHeader(reader)
 	if err != nil {
@@ -122,6 +124,7 @@ func ReadMessage(reader io.Reader) (Message, error) {
 	return msg, nil
 }
 
+// WriteMessage encodes a message and writes it in a io.Writer. It generates the header of the message.
 func WriteMessage(writer io.Writer, msg Message) error {
 	var buf bytes.Buffer
 	err := msg.Encode(&buf)
