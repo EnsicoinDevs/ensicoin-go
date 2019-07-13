@@ -1,9 +1,17 @@
-FROM golang:latest AS build-env
+FROM golang:alpine AS build-env
 
+RUN apk update
+RUN apk add git
+
+RUN mkdir /src
 WORKDIR /src
+COPY go.mod .
+COPY go.sum .
+
+RUN go mod download
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -mod=vendor -o eccd
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o eccd
 
 FROM alpine
 

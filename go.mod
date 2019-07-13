@@ -24,8 +24,6 @@ require (
 	golang.org/x/net v0.0.0-20190620200207-3b0461eec859
 	golang.org/x/sys v0.0.0-20190626221950-04f50cda93cb // indirect
 	golang.org/x/text v0.3.2 // indirect
-	golang.org/x/tools v0.0.0-20190628034336-212fb13d595e // indirect
-	google.golang.org/appengine v1.4.0 // indirect
 	google.golang.org/genproto v0.0.0-20190508193815-b515fa19cec8 // indirect
 	google.golang.org/grpc v1.20.1
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
