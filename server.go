@@ -331,7 +331,7 @@ func (server *Server) onGetBlocks(peer *peer.Peer, message *network.GetBlocksMes
 
 	var inventory []*network.InvVect
 
-	hashes, err := server.blockchain.FindBlockHashesStartingAt(startAt)
+	hashes, err := server.blockchain.FindBlockHashesStartingAt(startAt, 500)
 	if err != nil {
 		log.WithField("startAt", startAt).WithError(err).Error("error finding the block hashes")
 		return

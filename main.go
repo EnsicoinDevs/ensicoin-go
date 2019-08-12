@@ -14,16 +14,13 @@ import (
 	"runtime/pprof"
 )
 
-var (
-	server *Server
-)
-
 func init() {
+	pflag.BoolP("version", "v", false, "display version information and exit")
 	pflag.StringP("level", "l", "info", "log level (trace, debug, info, error)")
 	pflag.IntP("port", "p", consensus.INGOING_PORT, "listening port")
 	pflag.Int("rpcport", consensus.INGOING_PORT+1, "rpc listening port")
-	pflag.StringP("cfgdir", "c", getAppConfigDir(), "config directory")
-	pflag.StringP("datadir", "d", getAppDataDir(), "data directory")
+	pflag.StringP("cfgdir", "c", getAppConfigDir(), "directory to store configuration")
+	pflag.StringP("datadir", "d", getAppDataDir(), "directory to store data")
 	pflag.String("cpuprofile", "", "write cpu profile to file")
 
 	viper.BindPFlags(pflag.CommandLine)
@@ -99,6 +96,11 @@ var rootCmd = &cobra.Command{
 		}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
+		if viper.GetBool("version") {
+			log.Info("eccd version 0.0.0")
+			return
+		}
+
 		if err := launch(); err != nil {
 			os.Exit(1)
 		}
@@ -136,7 +138,7 @@ func launch() error {
 	log.WithField("cfgdir", viper.GetString("cfgdir")).Info("configuration directory is")
 	log.WithField("datadir", viper.GetString("datadir")).Info("data directory is")
 
-	server = NewServer()
+	server := NewServer()
 	go server.Start()
 	defer func() {
 		log.Info("gracefully shutting down")

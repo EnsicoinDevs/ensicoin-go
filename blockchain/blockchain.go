@@ -377,13 +377,13 @@ func (blockchain *Blockchain) FindBestBlock() (*Block, error) {
 	return block, nil
 }
 
-func (blockchain *Blockchain) findBlockHashesStartingAt(hash *utils.Hash) ([]*utils.Hash, error) {
+func (blockchain *Blockchain) findBlockHashesStartingAt(hash *utils.Hash, limit int) ([]*utils.Hash, error) {
 	var hashes []*utils.Hash
 
 	err := blockchain.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket(followingBucket)
 
-		for {
+		for limit > 0 {
 			hashBytes := b.Get(hash.Bytes())
 			if hashBytes == nil {
 				break
@@ -392,6 +392,7 @@ func (blockchain *Blockchain) findBlockHashesStartingAt(hash *utils.Hash) ([]*ut
 			hash = utils.NewHash(hashBytes)
 
 			hashes = append(hashes, hash)
+			limit--
 		}
 
 		return nil
@@ -403,7 +404,7 @@ func (blockchain *Blockchain) findBlockHashesStartingAt(hash *utils.Hash) ([]*ut
 	return hashes, nil
 }
 
-func (blockchain *Blockchain) FindBlockHashesStartingAt(hash *utils.Hash) ([]*utils.Hash, error) {
+func (blockchain *Blockchain) FindBlockHashesStartingAt(hash *utils.Hash, limit int) ([]*utils.Hash, error) {
 	log.WithFields(log.Fields{
 		"func":  "FindBlockHashesStartingAt",
 		"mutex": "blockchain",
@@ -415,7 +416,7 @@ func (blockchain *Blockchain) FindBlockHashesStartingAt(hash *utils.Hash) ([]*ut
 		"mutex": "blockchain",
 	}).Trace("runlocking")
 
-	return blockchain.findBlockHashesStartingAt(hash)
+	return blockchain.findBlockHashesStartingAt(hash, limit)
 }
 
 func (blockchain *Blockchain) CalcNextBlockDifficulty(timestamp time.Time, ancestorTimestamp time.Time, ancestorTarget *big.Int) (*big.Int, error) {
